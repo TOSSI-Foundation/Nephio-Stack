@@ -1,0 +1,38 @@
+# --- Go ---
+/bin/
+operator/bin/
+*.test
+*.out
+cover.out
+vendor/
+
+# --- Build artifacts / images ---
+*.tar
+*.tgz
+*.img
+
+# --- Secrets, credentials, kubeconfigs (NEVER commit) ---
+*.kubeconfig
+kubeconfig
+kubeconfig*
+.kube/
+*.key
+*.pem
+*-key.json
+secrets/
+*secret*.yaml
+*.token
+
+# --- Local env / generated state ---
+.env
+*.local
+.build/
+tmp/
+*.log
+
+# --- Editors / OS ---
+.DS_Store
+*.swp
+*.swo
+.idea/
+.vscode/
