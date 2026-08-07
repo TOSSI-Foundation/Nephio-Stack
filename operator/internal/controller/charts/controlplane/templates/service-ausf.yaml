@@ -1,0 +1,36 @@
+{{/*
+# Copyright 2020-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+
+{{- if .Values.config.ausf.deploy }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ausf
+  labels:
+{{ tuple "ausf" . | include "5g-control-plane.metadata_labels" | indent 4 }}
+spec:
+  type: {{ .Values.config.ausf.serviceType }}
+  selector:
+{{ tuple "ausf" . | include "5g-control-plane.metadata_labels" | indent 4 }}
+  ports:
+  - name: prometheus-exporter
+    port: {{ .Values.config.ausf.prometheus.port }}
+    protocol: TCP
+{{- if eq .Values.config.ausf.serviceType "NodePort" }}
+{{- if .Values.config.ausf.prometheus.nodePort }}
+    nodePort: {{ .Values.config.ausf.prometheus.nodePort }}
+{{- end }}
+{{- end }}
+  - name: sbi
+    port: {{ .Values.config.ausf.sbi.port }}
+    protocol: TCP
+{{- if eq .Values.config.ausf.serviceType "NodePort" }}
+{{- if .Values.config.ausf.sbi.nodePort }}
+    nodePort: {{ .Values.config.ausf.sbi.nodePort }}
+{{- end }}
+{{- end }}
+{{- end }}

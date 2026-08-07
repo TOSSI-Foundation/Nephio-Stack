@@ -1,0 +1,138 @@
+# Copyright 2020-present Open Networking Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
+images:
+  repository: "ghcr.io/omec-project/" # default GitHub Registry
+  tags:
+    init: pod-init:rel-1.3.0
+    simapp: simapp:rel-1.9.0
+  pullPolicy: IfNotPresent
+
+nodeSelectors:
+  enabled: false
+  label: node-role.aetherproject.org/5gc
+  value: true
+
+resources:
+  enabled: false
+  simapp:
+    requests:
+      cpu: 1
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+config:
+  coreDump:
+    enabled: false
+    path: /tmp/coredump
+  simapp:
+    deploy: true
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":9089,"schema":"HTTP"}]'
+    prometheus:
+      port: 9089
+      nodePort:
+        enabled: false
+        port: 30080
+    config:
+      port: 8080
+      nodePort:
+        enabled: false
+        port: 30081
+    cfgFiles:
+      simapp.yaml:
+        info:
+          version: 1.0.0
+          description: SIMAPP initial local configuration
+          http-version: 1
+        logger:
+          # network function
+          APP:
+            debugLevel: info
+        configuration:
+          provision-network-slice: false
+          max-workers: 50 # number of Go threads to send messages in parallel
+          subscribers:
+          - ueId-start: "001010000007500"
+            ueId-end: "001010000007509"
+            plmnId: "00101"
+            opc: "981d464c7c52eb6e5036234984ad0bcf"
+            op: ""
+            key: "5122250214c33e723a5dd523fc145fc0"
+            sequenceNumber: "16f3b3f70fc2"
+          sub-provision-endpt:
+            addr: webui
+            port: 5000
+          # sub-proxy-endpt:
+            # addr: subscriber-proxy.aether-roc.svc.cluster.local
+            # port: 5000
+          device-groups:
+          - name:  "gnbsim-user-group1"
+            imsis:
+              - "001010000007500"
+              - "001010000007501"
+              - "001010000007502"
+              - "001010000007503"
+              - "001010000007504"
+              - "001010000007505"
+              - "001010000007506"
+              - "001010000007507"
+              - "001010000007508"
+              - "001010000007509"
+            msisdns:
+              - "msisdn-9000000001"
+              - "msisdn-9000000002"
+              - "msisdn-9000000003"
+              - "msisdn-9000000004"
+              - "msisdn-9000000005"
+              - "msisdn-9000000006"
+              - "msisdn-9000000007"
+              - "msisdn-9000000008"
+              - "msisdn-9000000009"
+              - "msisdn-9000000010"
+            ip-domain-name: "pool1"
+            ip-domains:
+              - dnn: internet
+                dns-primary: "8.8.8.8"
+                mtu: 1460
+                ue-ip-pool: "192.168.100.0/24"
+                ue-dnn-qos:
+                  dnn-mbr-downlink: 5
+                  dnn-mbr-uplink: 2
+                  bitrate-unit: Mbps
+                  traffic-class:
+                    name: "gold"
+                    qci: 9
+                    arp: 6
+                    pdb: 300
+                    pelr: 6
+            site-info: "enterprise"
+          network-slices:
+          - name: "slice1"
+            slice-id:
+              sd: "010203"
+              sst: 1
+            site-device-group:
+            - "gnbsim-user-group1"
+            application-filtering-rules:
+            - rule-name: "ALLOW-ALL"
+              priority: 250
+              action: "permit"
+              endpoint: "0.0.0.0/0"
+              traffic-class:
+                qci: 9
+                arp: 6
+            site-info:
+              gNodeBs:
+              - name: "gnb1"
+                tac: 1
+              plmn:
+                mcc: "208"
+                mnc: "93"
+              site-name: "enterprise"
+              upf:
+                upf-name: "upf"
+                upf-port: 8805

@@ -1,0 +1,32 @@
+{{/*
+# Copyright 2020-present Open Networking Foundation
+
+ # SPDX-License-Identifier: Apache-2.0
+*/}}
+
+---
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: gnb-net
+{{- if $.Values.config.gnbsim.sriov.enabled }}
+  annotations:
+    k8s.v1.cni.cncf.io/resourceName:  {{ .Values.config.gnbsim.sriov.resourceName }}
+{{- end }}
+spec:
+  config: '{
+{{- if semverCompare ">=1.16-0" .Capabilities.KubeVersion.GitVersion }}
+    "cniVersion": "0.3.1",
+{{- end }}
+    "type": {{ .Values.config.gnbsim.cniPlugin | quote }},
+  {{- if eq .Values.config.gnbsim.cniPlugin "macvlan" }}
+    "master": {{ .Values.config.gnbsim.iface | quote }},
+  {{- end }}
+  {{- if eq .Values.config.gnbsim.cniPlugin "host-device" }}
+    "device": {{ .Values.config.gnbsim.iface | quote }},
+  {{- end }}
+    "ipam": {
+        "type": {{ .Values.config.gnbsim.ipam | quote }}
+    }
+  }'
+---

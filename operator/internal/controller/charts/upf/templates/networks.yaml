@@ -1,0 +1,68 @@
+{{/*
+# Copyright 2020-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+
+---
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: access-net
+{{- if $.Values.config.upf.sriov.enabled }}
+  annotations:
+    k8s.v1.cni.cncf.io/resourceName: {{ .Values.config.upf.access.resourceName }}
+{{- end }}
+spec:
+  config: '{
+    "cniVersion": "0.3.1",
+  {{- if hasKey .Values.config.upf.access "vlan" }}
+    "vlan": {{ .Values.config.upf.access.vlan }},
+  {{- end }}
+    "type": {{ .Values.config.upf.access.cniPlugin | quote }},
+  {{- if eq .Values.config.upf.access.cniPlugin "macvlan" }}
+    "master": {{ .Values.config.upf.access.iface | quote }},
+  {{- end }}
+  {{- if eq .Values.config.upf.access.cniPlugin "bridge" }}
+    "bridge": {{ .Values.config.upf.access.iface | quote }},
+    "isGateway": false,
+  {{- end }}
+  {{- if eq .Values.config.upf.access.cniPlugin "host-device" }}
+    "device": {{ .Values.config.upf.access.iface | quote }},
+  {{- end }}
+    "ipam": {
+        "type": {{ .Values.config.upf.access.ipam | quote }}
+    },
+    "capabilities": { "mac": true, "ips": true}
+  }'
+---
+apiVersion: "k8s.cni.cncf.io/v1"
+kind: NetworkAttachmentDefinition
+metadata:
+  name: core-net
+{{- if $.Values.config.upf.sriov.enabled }}
+  annotations:
+    k8s.v1.cni.cncf.io/resourceName: {{ .Values.config.upf.core.resourceName }}
+{{- end }}
+spec:
+  config: '{
+    "cniVersion": "0.3.1",
+  {{- if hasKey .Values.config.upf.core "vlan" }}
+    "vlan": {{ .Values.config.upf.core.vlan }},
+  {{- end }}
+    "type": {{ .Values.config.upf.core.cniPlugin | quote }},
+  {{- if eq .Values.config.upf.core.cniPlugin "macvlan" }}
+    "master": {{ .Values.config.upf.core.iface | quote }},
+  {{- end }}
+  {{- if eq .Values.config.upf.core.cniPlugin "bridge" }}
+    "bridge": {{ .Values.config.upf.core.iface | quote }},
+    "isGateway": false,
+  {{- end }}
+  {{- if eq .Values.config.upf.core.cniPlugin "host-device" }}
+    "device": {{ .Values.config.upf.core.iface | quote }},
+  {{- end }}
+    "ipam": {
+        "type": {{ .Values.config.upf.core.ipam | quote }}
+    },
+    "capabilities": { "mac": true, "ips": true}
+  }'

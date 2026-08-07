@@ -1,0 +1,81 @@
+{{/*
+# Copyright 2022-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+{{- if .Values.config.upf.sriov.enabled }}
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: sriov-device-plugin
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: sriov-device-plugin
+  labels:
+    tier: node
+    app: sriovdp
+spec:
+  selector:
+    matchLabels:
+      name: sriov-device-plugin
+  template:
+    metadata:
+      labels:
+        name: sriov-device-plugin
+        tier: node
+        app: sriovdp
+    spec:
+      hostNetwork: true
+      nodeSelector:
+        kubernetes.io/arch: amd64
+      tolerations:
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+      initContainers:
+{{ include "omec-user-plane.sriov_init_container" (dict "Values" .Values "mode" "sriov-device-plugin") | indent 8 }}
+      serviceAccountName: sriov-device-plugin
+      containers:
+        - name: kube-sriovdp
+          image: {{ .Values.images.repository }}{{ .Values.images.tags.sriov }}
+          imagePullPolicy: {{ .Values.images.pullPolicy }}
+          command:
+            - /entrypoint.sh
+          args:
+            - --log-dir=sriovdp
+            - --log-level=10
+          securityContext:
+            privileged: true
+          volumeMounts:
+            - name: devicesock
+              mountPath: /var/lib/kubelet/
+              readOnly: false
+            - name: log
+              mountPath: /var/log
+            - name: config-volume
+              mountPath: /etc/pcidp
+            - name: device-info
+              mountPath: /var/run/k8s.cni.cncf.io/devinfo/dp
+      volumes:
+        - name: devicesock
+          hostPath:
+            path: /var/lib/kubelet/
+        - name: log
+          hostPath:
+            path: /var/log
+        - name: device-info
+          hostPath:
+            path: /var/run/k8s.cni.cncf.io/devinfo/dp
+            type: DirectoryOrCreate
+        - name: config-volume
+          configMap:
+            name: sriovdp-config
+            items:
+              - key: config.json
+                path: config.json
+        - name: cni-bin
+          hostPath:
+            path: /opt/cni/bin
+{{- end }}

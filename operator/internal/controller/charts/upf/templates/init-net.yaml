@@ -1,0 +1,27 @@
+{{/*
+# Copyright 2022-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+{{- if .Values.config.upf.sriov.enabled }}
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: init-net
+spec:
+  selector:
+    matchLabels:
+      name: init-net
+  template:
+    metadata:
+      labels:
+        name: init-net
+    spec:
+      containers:
+{{ include "omec-user-plane.sriov_init_container" (dict "Values" .Values "mode" "init-net") | indent 6 }}
+      volumes:
+      - name: cni-bin
+        hostPath:
+          path: /opt/cni/bin
+{{- end }}

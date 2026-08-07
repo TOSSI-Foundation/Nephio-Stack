@@ -1,0 +1,109 @@
+{{/*
+# Copyright 2024-present Intel Corporation
+# Copyright 2020-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+{{- if .Values.config.nrf.deploy }}
+{{ tuple "nrf" . | include "5g-control-plane.service_account" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nrf
+  labels:
+{{ tuple "nrf" . | include "5g-control-plane.metadata_labels" | indent 4 }}
+spec:
+  replicas: 1
+  #serviceName: nrf-headless
+  selector:
+    matchLabels:
+{{ tuple "nrf" . | include "5g-control-plane.metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple "nrf" . | include "5g-control-plane.metadata_labels" | indent 8 }}
+      annotations:
+    {{- tuple "nrf" . | include "5g-control-plane.certs_pod_annotations" | nindent 8 }}
+    {{- with .Values.config.nrf.podAnnotations }}
+    {{- toYaml . | nindent 8 }}
+    {{- end }}
+    spec:
+      serviceAccountName: nrf
+    {{- if .Values.nodeSelectors.enabled }}
+      nodeSelector:
+        {{ .Values.nodeSelectors.label }}: {{ .Values.nodeSelectors.value | quote }}
+    {{- end }}
+    {{- if hasKey .Values.images "pullSecrets" }}
+      imagePullSecrets:
+{{ toYaml .Values.images.pullSecrets | indent 8 }}
+    {{- end }}
+      initContainers:
+    {{ tuple "nrf" . | include "5g-control-plane.certs_init" | nindent 6 }}
+      {{ if .Values.config.coreDump.enabled }}
+{{ tuple "nrf" . | include "5g-control-plane.coredump_init" | nindent 6 }}
+      {{ end }}
+      containers:
+      - name: nrf
+        image: {{ .Values.images.repository }}{{ .Values.images.tags.nrf }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+      {{ if .Values.config.coreDump.enabled }}
+        securityContext:
+          runAsUser: 0
+      {{ end }}
+        stdin: true
+        tty: true
+        command: ["/opt/nrf-run.sh"]
+        env:
+      {{- if eq .Values.config.GIN.mode "release" }}
+        - name: GIN_MODE
+          value: release
+      {{- end }}
+{{ tuple "nrf" . | include "5g-control-plane.certs_env" | indent 8 }}
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      {{- if .Values.resources.enabled }}
+        resources:
+{{ toYaml .Values.resources.nrf | indent 10 }}
+      {{- end }}
+        volumeMounts:
+        - name: nrf-config
+          mountPath: /opt
+{{ tuple "nrf" . | include "5g-control-plane.certs_volume_mounts" | indent 8 }}
+      {{- if .Values.config.coreDump.enabled }}
+        - name: coredump
+          mountPath: /tmp/coredump
+      {{- end }}
+      volumes:
+      - name: nrf-config
+        configMap:
+          name: nrf
+          defaultMode: 493
+      - name: certs
+        emptyDir: {}
+      - name: certs-src
+        projected:
+          sources:
+            - secret:
+                name: nrf-certs
+                items:
+                  - key: tls.crt
+                    path: tls.crt
+                  - key: tls.key
+                    path: tls.key
+            - secret:
+                name: {{ include "5g-control-plane.shared-ca-secret-name" . }}
+                items:
+                  - key: ca.crt
+                    path: ca.crt
+    {{- if .Values.config.coreDump.enabled }}
+      - name: host-rootfs
+        hostPath:
+          path: /
+      - name: coredump
+        hostPath:
+          path: {{ .Values.config.coreDump.path }}
+    {{- end }}
+{{- end }}

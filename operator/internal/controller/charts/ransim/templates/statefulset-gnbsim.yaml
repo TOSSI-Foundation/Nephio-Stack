@@ -1,0 +1,115 @@
+{{/*
+# Copyright 2024-present Intel Corporation
+# Copyright 2020-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+{{- if .Values.config.gnbsim.deploy }}
+{{ tuple "gnbsim" . | include "5g-ransim-plane.service_account" }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: gnbsim
+  labels:
+{{ tuple "gnbsim" . | include "5g-ransim-plane.metadata_labels" | indent 4 }}
+spec:
+  replicas: 1
+  serviceName: gnbsim-headless
+  selector:
+    matchLabels:
+{{ tuple "gnbsim" . | include "5g-ransim-plane.metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple "gnbsim" . | include "5g-ransim-plane.metadata_labels" | indent 8 }}
+{{- if not .Values.config.gnbsim.singleInterface }}
+      annotations:
+        k8s.v1.cni.cncf.io/networks: '[
+           {
+               "name": "gnb-net",
+               "interface": "gnb",
+{{- if semverCompare ">=1.16-0" .Capabilities.KubeVersion.GitVersion }}
+               "ips": [ {{ include "gnbiplist" .}} ]
+{{- else }}
+               "ips": {{ .Values.config.gnbsim.gnb.ips | quote }}
+{{- end }}
+           }
+         ]'
+{{- end }}
+    spec:
+    {{- if .Values.nodeSelectors.enabled }}
+      nodeSelector:
+        {{ .Values.nodeSelectors.gnbsim.label }}: {{ .Values.nodeSelectors.gnbsim.value }}
+    {{- end }}
+      serviceAccountName: gnbsim
+    {{- if hasKey .Values.images "pullSecrets" }}
+      imagePullSecrets:
+{{ toYaml .Values.images.pullSecrets | indent 8 }}
+    {{- end }}
+      initContainers:
+    {{- if .Values.config.gnbsim.waitForAmf }}
+      - name: wait-amf-module
+        image: {{ .Values.images.repository }}{{ .Values.images.tags.init }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        command: ['sh', '-c', 'until nslookup amf; do echo waiting for amf; sleep 4; done; sleep 20']
+    {{- end }}
+    {{- if .Values.config.coreDump.enabled }}
+    {{ tuple "gnbsim" . | include "5g-ransim-plane.coredump_init" | indent 6 }}
+    {{- end }}
+      containers:
+      - name: gnbsim
+        image: {{ .Values.images.repository }}{{ .Values.images.tags.gnbsim }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        securityContext:
+          privileged: true
+          runAsUser: 0
+        stdin: true
+        tty: true
+        command: ["/opt/gnbsim-run.sh"]
+        env:
+        - name: MEM_LIMIT
+          valueFrom:
+            resourceFieldRef:
+              containerName: gnbsim
+              resource: limits.memory
+              divisor: 1Mi
+      {{- if eq .Values.config.GIN.mode "release" }}
+        - name: GIN_MODE
+          value: release
+      {{- end }}
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      {{- if or .Values.resources.enabled .Values.config.gnbsim.sriov.enabled }}
+        resources:
+{{ toYaml .Values.resources.gnbsim | indent 10 }}
+{{- if .Values.config.gnbsim.sriov.enabled }}
+          requests:
+            {{ .Values.config.gnbsim.sriov.resourceName }}: 1
+          limits:
+            {{ .Values.config.gnbsim.sriov.resourceName }}: 1
+      {{- end }}
+      {{- end }}
+        volumeMounts:
+        - name: nf-config
+          mountPath: /opt
+      {{- if .Values.config.coreDump.enabled }}
+        - name: coredump
+          mountPath: /tmp/coredump
+      {{- end }}
+      volumes:
+      - name: nf-config
+        configMap:
+          name: gnbsim
+          defaultMode: 493
+    {{- if .Values.config.coreDump.enabled }}
+      - name: host-rootfs
+        hostPath:
+          path: /
+      - name: coredump
+        hostPath:
+          path: {{ .Values.config.coreDump.path }}
+    {{- end }}
+{{- end }}

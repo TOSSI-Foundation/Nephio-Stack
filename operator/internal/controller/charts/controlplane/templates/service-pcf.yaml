@@ -1,0 +1,40 @@
+{{/*
+# Copyright 2020-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+
+{{- if .Values.config.pcf.deploy }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: pcf
+  labels:
+{{ tuple "pcf" . | include "5g-control-plane.metadata_labels" | indent 4 }}
+spec:
+  type: {{ .Values.config.pcf.serviceType }}
+{{- if .Values.config.pcf.externalIp }}
+  externalIPs:
+    - {{ .Values.config.pcf.externalIp }}
+{{- end }}
+  selector:
+{{ tuple "pcf" . | include "5g-control-plane.metadata_labels" | indent 4 }}
+  ports:
+  - name: prometheus-exporter
+    port: {{ .Values.config.pcf.prometheus.port }}
+    protocol: TCP
+{{- if eq .Values.config.pcf.serviceType "NodePort" }}
+{{- if .Values.config.pcf.prometheus.nodePort }}
+    nodePort: {{ .Values.config.pcf.prometheus.nodePort }}
+{{- end }}
+{{- end }}
+  - name: sbi
+    port: {{ .Values.config.pcf.sbi.port }}
+    protocol: TCP
+{{- if eq .Values.config.pcf.serviceType "NodePort" }}
+{{- if .Values.config.pcf.sbi.nodePort }}
+    nodePort: {{ .Values.config.pcf.sbi.nodePort }}
+{{- end }}
+{{- end }}
+{{- end }}

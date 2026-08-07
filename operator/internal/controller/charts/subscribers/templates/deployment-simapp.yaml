@@ -1,0 +1,90 @@
+{{/*
+# Copyright 2024-present Intel Corporation
+# Copyright 2020-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+{{- if .Values.config.simapp.deploy }}
+{{ tuple "simapp" . | include "omec-sub-provision.service_account" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: simapp
+  labels:
+{{ tuple "simapp" . | include "omec-sub-provision.metadata_labels" | indent 4 }}
+spec:
+  replicas: 1
+  #serviceName: simapp-headless
+  selector:
+    matchLabels:
+{{ tuple "simapp" . | include "omec-sub-provision.metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple "simapp" . | include "omec-sub-provision.metadata_labels" | indent 8 }}
+    {{- with .Values.config.simapp.podAnnotations }}
+      annotations:
+        helm.sh/hook: pre-install
+        helm.sh/hook-weight: "5"
+        {{- toYaml . | nindent 8 }}
+    {{- end }}
+    spec:
+      serviceAccountName: simapp
+    {{- if .Values.nodeSelectors.enabled }}
+      nodeSelector:
+        {{ .Values.nodeSelectors.label }}: {{ .Values.nodeSelectors.value | quote }}
+    {{- end }}
+    {{- if hasKey .Values.images "pullSecrets" }}
+      imagePullSecrets:
+{{ toYaml .Values.images.pullSecrets | indent 8 }}
+    {{- end }}
+      initContainers:
+      - name: wait-simapp-module2
+        image: {{ .Values.images.repository }}{{ .Values.images.tags.init }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        command: ['sh', '-c', 'until nslookup simapp; do echo waiting for simapp; sleep 4; done;']
+    {{- if .Values.config.coreDump.enabled }}
+    {{ tuple "simapp" . | include "omec-sub-provision.coredump_init" | indent 6 }}
+    {{- end }}
+      containers:
+      - name: simapp
+        image: {{ .Values.images.repository }}{{ .Values.images.tags.simapp }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+      {{- if .Values.config.coreDump.enabled }}
+        securityContext:
+          runAsUser: 0
+      {{- end }}
+        stdin: true
+        tty: true
+        command: ["/opt/simapp-run.sh"]
+        env:
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      {{- if .Values.resources.enabled }}
+        resources:
+{{ toYaml .Values.resources.simapp | indent 10 }}
+      {{- end }}
+        volumeMounts:
+        - name: nf-config
+          mountPath: /opt
+      {{- if .Values.config.coreDump.enabled }}
+        - name: coredump
+          mountPath: /tmp/coredump
+      {{- end }}
+      volumes:
+      - name: nf-config
+        configMap:
+          name: simapp
+          defaultMode: 493
+    {{- if .Values.config.coreDump.enabled }}
+      - name: host-rootfs
+        hostPath:
+          path: /
+      - name: coredump
+        hostPath:
+          path: {{ .Values.config.coreDump.path }}
+    {{- end }}
+{{- end }}

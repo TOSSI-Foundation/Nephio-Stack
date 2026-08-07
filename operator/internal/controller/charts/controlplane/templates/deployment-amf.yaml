@@ -1,0 +1,125 @@
+{{/*
+# Copyright 2024-present Intel Corporation
+# Copyright 2020-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+{{- if .Values.config.amf.deploy }}
+{{ tuple "amf" . | include "5g-control-plane.service_account" }}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: amf
+  labels:
+{{ tuple "amf" . | include "5g-control-plane.metadata_labels" | indent 4 }}
+spec:
+  replicas: 1
+  #serviceName: amf-headless
+  selector:
+    matchLabels:
+{{ tuple "amf" . | include "5g-control-plane.metadata_labels" | indent 6 }}
+  template:
+    metadata:
+      labels:
+{{ tuple "amf" . | include "5g-control-plane.metadata_labels" | indent 8 }}
+      annotations:
+    {{- tuple "amf" . | include "5g-control-plane.certs_pod_annotations" | nindent 8 }}
+    {{- with .Values.config.amf.podAnnotations }}
+    {{- toYaml . | nindent 8 }}
+    {{- end }}
+    spec:
+      serviceAccountName: amf
+    {{- if .Values.nodeSelectors.enabled }}
+      nodeSelector:
+        {{ .Values.nodeSelectors.label }}: {{ .Values.nodeSelectors.value | quote }}
+    {{- end }}
+    {{- if hasKey .Values.images "pullSecrets" }}
+      imagePullSecrets:
+{{ toYaml .Values.images.pullSecrets | indent 8 }}
+    {{- end }}
+      initContainers:
+      {{- if .Values.kafka.deploy }}
+      - name: wait-kafka-module
+        image: {{ .Values.images.repository }}{{ .Values.images.tags.init }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+        command: ['sh', '-c', 'until nslookup kafka && nc -z -w 2 kafka 9092; do echo waiting for kafka listener; sleep 4; done;']
+      {{- end }}
+    {{ tuple "amf" . | include "5g-control-plane.certs_init" | nindent 6 }}
+      {{ if .Values.config.coreDump.enabled }}
+{{ tuple "amf" . | include "5g-control-plane.coredump_init" | nindent 6 }}
+      {{ end }}
+      containers:
+      - name: amf
+        image: {{ .Values.images.repository }}{{ .Values.images.tags.amf }}
+        imagePullPolicy: {{ .Values.images.pullPolicy }}
+      {{ if .Values.config.coreDump.enabled }}
+        securityContext:
+          runAsUser: 0
+      {{ end }}
+        stdin: true
+        tty: true
+        command: [ /opt/amf-run.sh ]
+        env:
+        - name: GRPC_GO_LOG_VERBOSITY_LEVEL
+          value: {{ .Values.config.grpc.golog_verbosity | quote }}
+        - name: GRPC_GO_LOG_SEVERITY_LEVEL
+          value: {{ .Values.config.grpc.severity | quote }}
+        - name: GRPC_TRACE
+          value: {{ .Values.config.grpc.trace | quote }}
+        - name: GRPC_VERBOSITY
+          value: {{ .Values.config.grpc.verbosity | quote }}
+        - name: GOGC
+          value: {{ .Values.config.gogc | quote }}
+      {{- if eq .Values.config.GIN.mode "release" }}
+        - name: GIN_MODE
+          value: release
+      {{- end }}
+{{ tuple "amf" . | include "5g-control-plane.certs_env" | indent 8 }}
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+      {{- if .Values.resources.enabled }}
+        resources:
+{{ toYaml .Values.resources.amf | indent 10 }}
+      {{- end }}
+        volumeMounts:
+        - name: nf-config
+          mountPath: /opt
+{{ tuple "amf" . | include "5g-control-plane.certs_volume_mounts" | indent 8 }}
+      {{- if .Values.config.coreDump.enabled }}
+        - name: coredump
+          mountPath: /tmp/coredump
+      {{- end }}
+      volumes:
+      - name: nf-config
+        configMap:
+          name: amf
+          defaultMode: 493
+      - name: certs
+        emptyDir: {}
+      - name: certs-src
+        projected:
+          sources:
+            - secret:
+                name: amf-certs
+                items:
+                  - key: tls.crt
+                    path: tls.crt
+                  - key: tls.key
+                    path: tls.key
+            - secret:
+                name: {{ include "5g-control-plane.shared-ca-secret-name" . }}
+                items:
+                  - key: ca.crt
+                    path: ca.crt
+    {{- if .Values.config.coreDump.enabled }}
+      - name: host-rootfs
+        hostPath:
+          path: /
+      - name: coredump
+        hostPath:
+          path: {{ .Values.config.coreDump.path }}
+    {{- end }}
+{{- end }}

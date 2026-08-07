@@ -1,0 +1,799 @@
+# Copyright (c) 2022-present Intel Corporation
+# Copyright 2020-present Open Networking Foundation
+#
+# SPDX-License-Identifier: Apache-2.0
+
+images:
+  repository: "ghcr.io/omec-project/" # default GitHub Registry
+  tags:
+    # Pinned to the validated omec sd-core v4.1.0 release set (tested-together). The chart's prior
+    # tags had drifted each NF slightly ahead of any released aggregate (amf 3.3.0 / smf 4.3.0 /
+    # pcf 3.2.0 / rest 3.1.0) -> the AMF aborted (exit 134) on SBI/config schema skew. Keep these
+    # in lockstep; bump only to another *released* aggregate, never per-NF.
+    init: pod-init:rel-1.3.0
+    amf: 5gc-amf:rel-3.1.0
+    ausf: 5gc-ausf:rel-3.0.0
+    nrf: 5gc-nrf:rel-3.0.0
+    nssf: 5gc-nssf:rel-3.0.0
+    pcf: 5gc-pcf:rel-3.0.0
+    smf: 5gc-smf:rel-4.1.0
+    udm: 5gc-udm:rel-3.0.0
+    udr: 5gc-udr:rel-3.0.0
+    webui: 5gc-webui:rel-3.0.0
+    metricfunc: metricfunc:rel-2.1.0
+    sctplb: sctplb:rel-1.9.0
+    upfadapter: upfadapter:rel-2.2.0
+  pullPolicy: IfNotPresent
+
+nodeSelectors:
+  enabled: false
+  label: node-role.aetherproject.org/5gc
+  value: true
+
+resources:
+  enabled: false
+  sctplb:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  amf:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  nrf:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  smf:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  upfadapter:
+    requests:
+      cpu: 1
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 1Gi
+  ausf:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  nssf:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  pcf:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  udr:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  udm:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 2
+      memory: 1Gi
+  webui:
+    requests:
+      cpu: 1
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+  metricfunc:
+    requests:
+      cpu: 1
+      memory: 1Gi
+    limits:
+      cpu: 1
+      memory: 1Gi
+
+kafka:
+  deploy: false
+  fullnameOverride: kafka
+  listeners:
+    client:
+      protocol: PLAINTEXT
+    controller:
+      protocol: PLAINTEXT
+    interbroker:
+      protocol: PLAINTEXT
+    external:
+      protocol: PLAINTEXT
+  controller:
+    replicaCount: 1
+    persistence:
+      enabled: false
+    # Enable nodeSelector if needed to control where to deploy the kafka instance(s)
+    # nodeSelector:
+    #   node-role.aetherproject.org/5gc: "true"
+  # global:
+  #   security:
+  #     allowInsecureImages: true # set to true when using images from local repo/registry
+  image:
+    # registry: ""
+    repository: bitnamilegacy/kafka # Bitnami moved images to bitnamilegacy (https://hub.docker.com/r/bitnami/kafka)
+    # tag: 4.0.0-debian-12-r10
+
+mongodb:
+  deploy: true
+  fullnameOverride: mongodb
+  persistence:
+    enabled: false
+  auth:
+    enabled: false
+  serviceAccount:
+    create: false
+  # Enable nodeSelector if needed to control where to deploy the mongodb instances
+  # nodeSelector:
+  #   node-role.aetherproject.org/5gc: "true"
+  # arbiter:
+  #   nodeSelector:
+  #     node-role.aetherproject.org/5gc: "true"
+  architecture: replicaset
+  replicaCount: 1
+  # MongoDB is the control plane's shared datastore, and a single registration
+  # drives ~55 operations against it, so the Bitnami "small" preset (750m CPU /
+  # 768Mi) throttles attach throughput long before any NF is busy. Sizes below
+  # come from a CPU sweep against a live core: throughput scales hard up to
+  # ~4 CPU and then plateaus. The limit needs that much headroom even though the
+  # working set averages ~2 cores, because the per-attach operations arrive in
+  # bursts that a tighter limit throttles. Memory is raised to cover the ~1.6Gi
+  # working set the 768Mi default cannot hold.
+  resourcesPreset: "none"
+  resources:
+    requests:
+      cpu: 2
+      memory: 1Gi
+    limits:
+      cpu: 4
+      memory: 2Gi
+  # global:
+  #   security:
+  #     allowInsecureImages: true # set to true when using images from local repo/registry
+  image:
+    # registry: ""
+    repository: bitnamilegacy/mongodb # Bitnami moved images to bitnamilegacy (https://hub.docker.com/r/bitnami/mongodb)
+    # tag: latest
+
+config:
+  certs:
+    clusterDomain: cluster.local
+    includeSystemRootBundle: true
+    leafValidityDays: 365
+    sharedCA:
+      existingPrivateSecret: "" # set to reuse an existing Secret with non-empty ca.crt and ca.key instead of chart-managing the private CA key; requires render-time cluster access so the chart can read that key and sign leaf certs
+      validityDays: 365
+  useExistingConfigMap: false
+  coreDump:
+    enabled: false
+    path: /tmp/coredump
+  mongodb:
+    name: aether
+    url: mongodb://mongodb-headless:27017/?replicaSet=rs0 # note that architecture: replicaset
+    authKeysDbName: authentication
+    authUrl: mongodb://mongodb-headless:27017/?replicaSet=rs0 # note that architecture: replicaset
+  grpc:  # this is used by AMF and SCTPLB
+    golog_verbosity: "0"
+    severity: "info"
+    trace: "none"
+    verbosity: "none"
+  # GOGC=200 halves GC frequency vs default (100), trading ~2x heap headroom for ~50% less GC CPU.
+  # Set to "off" to disable GC entirely (not recommended for production).
+  gogc: "200"
+
+  GIN:
+    mode: release          # Possible options are: release, debug
+  logger:
+    # network function
+    AMF:
+      debugLevel: info
+    SMF:
+      debugLevel: info
+    UDR:
+      debugLevel: info
+    UDM:
+      debugLevel: info
+    NRF:
+      debugLevel: info
+    NSSF:
+      debugLevel: info
+    PCF:
+      debugLevel: info
+    AUSF:
+      debugLevel: info
+    N3IWF:
+      debugLevel: info
+  # library
+    NAS:
+      debugLevel: info
+    NGAP:
+      debugLevel: info
+    NamfCommunication:
+      debugLevel: info
+    NamfEventExposure:
+      debugLevel: info
+    NsmfPDUSession:
+      debugLevel: info
+    NudrDataRepository:
+      debugLevel: info
+    OpenApi:
+      debugLevel: info
+    Util:
+      debugLevel: info
+  # webui
+    WEBUI:
+      debugLevel: info
+
+  webui:
+    deploy: true
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":8080,"schema":"HTTP"}]'
+    serviceType: ClusterIP
+    prometheus:
+      port: 8080
+      # Provide nodePort when serviceType is NodePort
+      # nodePort:
+    # serviceAnnotations:
+    #   external-dns.alpha.kubernetes.io/hostname: "aether-config.tenant-site.company.com"
+    urlport:
+      port: 5000
+      # Provide nodePort when serviceType is NodePort
+      #nodePort: 35000
+    rest:
+      port: 5001
+      # Provide nodePort when serviceType is NodePort
+      # nodePort: 35001
+    ingress:
+      enabled: false
+      hostname: aether.local
+      path: /
+      pathType: Prefix
+      # extraHosts:
+        # - host: aether.local
+        #   path: /
+    cfgFiles:
+      webuicfg.yaml:
+        info:
+          version: 1.0.0
+          description: WebUI initial local configuration
+        configuration:
+          enableAuthentication: false
+          spec-compliant-sdf: false
+          # webui-tls:
+          #   pem: /var/run/certs/tls.crt
+          #   key: /var/run/certs/tls.key
+          # nfconfig-tls:
+          #   pem: /var/run/certs/tls.crt
+          #   key: /var/run/certs/tls.key
+
+  udm:
+    deploy: true
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":8080,"schema":"HTTP"}]'
+    serviceType: ClusterIP
+    prometheus:
+      port: 8080
+      # Provide nodePort when serviceType is NodePort
+      # nodePort:
+    sbi:
+      port: 29503
+      # Provide nodePort when serviceType is NodePort
+      #nodePort: 30074
+    cfgFiles:
+      # https://github.com/omec-project/udm/blob/main/factory/udmcfg.yaml
+      udmcfg.yaml:
+        info:
+          version: 1.0.0
+          description: UDM initial local configuration
+        configuration:
+          nrfUri: https://nrf:29510
+          webuiUri: http://webui:5001
+          enableNrfCaching: false
+          nrfCacheEvictionInterval: 900
+          serviceList:
+            - nudm-sdm
+            - nudm-uecm
+            - nudm-ueau
+            - nudm-ee
+            - nudm-pp
+          sbi:
+            scheme: https
+            bindingIPv4: "0.0.0.0"
+            registerIPv4: udm
+            tls:
+              pem: /var/run/certs/tls.crt
+              key: /var/run/certs/tls.key
+          keys:
+            udmProfileAHNPublicKey: 5a8d38864820197c3394b92613b20b91633cbd897119273bf8e4a6f4eec0a650
+            udmProfileAHNPrivateKey: c53c22208b61860b06c62e5406a7b330c2b577aa5558981510d128247d38bd1d
+            udmProfileBHNPublicKey: 0472DA71976234CE833A6907425867B82E074D44EF907DFB4B3E21C1C2256EBCD15A7DED52FCBB097A4ED250E036C7B9C8C7004C4EEDC4F068CD7BF8D3F900E3B4
+            udmProfileBHNPrivateKey: F1AB1074477EBCC7F554EA1C5FC368B1616730155E0041AC447D6301975FECDA
+
+  udr:
+    deploy: true
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":8080,"schema":"HTTP"}]'
+    serviceType: ClusterIP
+    prometheus:
+      port: 8080
+      # Provide nodePort when serviceType is NodePort
+      # nodePort:
+    sbi:
+      port: 29504
+      # Provide nodePort when serviceType is NodePort
+      #nodePort: 30074
+    cfgFiles:
+      # https://github.com/omec-project/udr/blob/main/factory/udr_config.yaml
+      udrcfg.yaml:
+        info:
+          version: 1.0.0
+          description: UDR initial local configuration
+        configuration:
+          nrfUri: https://nrf:29510
+          webuiUri: http://webui:5001
+          sbi:
+            scheme: https
+            bindingIPv4: "0.0.0.0"
+            registerIPv4: udr
+            tls:
+              pem: /var/run/certs/tls.crt
+              key: /var/run/certs/tls.key
+
+  pcf:
+    deploy: true
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":8080,"schema":"HTTP"}]'
+    serviceType: ClusterIP
+    prometheus:
+      port: 8080
+      # Provide nodePort when serviceType is NodePort
+      # nodePort:
+    sbi:
+      port: 29507
+      # Provide nodePort when serviceType is NodePort
+      #nodePort: 30077
+    cfgFiles:
+      # https://github.com/omec-project/pcf/blob/main/factory/pcfcfg.yaml
+      pcfcfg.yaml:
+        info:
+          version: 1.0.0
+          description: PCF initial local configuration
+        configuration:
+          pcfName: PCF
+          nrfUri: https://nrf:29510
+          webuiUri: http://webui:5001
+          sbi:
+            scheme: https
+            bindingIPv4: "0.0.0.0"
+            registerIPv4: pcf
+            tls:
+              pem: /var/run/certs/tls.crt
+              key: /var/run/certs/tls.key
+          defaultBdtRefId: BdtPolicyId-
+          enableNrfCaching: false
+          nrfCacheEvictionInterval: 900
+          serviceList:
+            - serviceName: npcf-am-policy-control
+            - serviceName: npcf-smpolicycontrol
+              suppFeat: 3fff
+            - serviceName: npcf-bdtpolicycontrol
+            - serviceName: npcf-policyauthorization
+              suppFeat: 3
+            - serviceName: npcf-eventexposure
+            - serviceName: npcf-ue-policy-control
+
+  nssf:
+    deploy: true
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":8080,"schema":"HTTP"}]'
+    serviceType: ClusterIP
+    prometheus:
+      port: 8080
+      # Provide nodePort when serviceType is NodePort
+      # nodePort:
+    sbi:
+      port: 29531
+      # Provide nodePort when serviceType is NodePort
+      #nodePort: 30081
+    cfgFiles:
+      nssfcfg.yaml:
+        info:
+          version: 1.0.0
+          description: NSSF initial local configuration
+        configuration:
+          nssfName: NSSF
+          nrfUri: https://nrf:29510
+          webuiUri: http://webui:5001
+          sbi:
+            scheme: https
+            bindingIPv4: "0.0.0.0"
+            registerIPv4: nssf
+            tls:
+              pem: /var/run/certs/tls.crt
+              key: /var/run/certs/tls.key
+          serviceNameList:
+            - nnssf-nsselection
+            - nnssf-nssaiavailability
+          nsiList:
+            - snssai:
+                sst: 1
+                sd: "010203"
+              nsiInformationList:
+                - nrfId: https://nrf:29510/nnrf-nfm/v1/nf-instances
+                  nsiId: 22
+
+  sctplb:
+    deploy: false
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":9089,"schema":"HTTP"}]'
+    serviceType: ClusterIP
+    sctp_grpc:
+      port: 9000
+      #nodePort: 30088
+    ngapp:
+      #externalIp:
+      port: 38412
+      #nodePort: 30071
+    cfgFiles:
+      sctplb.yaml:
+        info:
+          version: 1.0.0
+          description: SCTPLB initial local configuration
+        logger:
+          sctpLogs: info
+          dispatcherLogs: info
+          clientdiscLogs: info
+        configuration:
+          type: "grpc"
+          services:
+            - uri: "amf-headless"
+          ngapIpList:
+            - 0.0.0.0
+
+  amf:
+    deploy: true
+    # serviceAnnotations:
+    #   external-dns.alpha.kubernetes.io/hostname: "aether-amf.tenant-site.company.com"
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":9089,"schema":"HTTP"}]'
+    serviceType: ClusterIP
+    prometheus:
+      port: 9089
+      # Provide nodePort when serviceType is NodePort
+      # nodePort:
+    sctp_grpc:
+      port: 9000
+      #nodePort: 30088
+    sbi:
+      port: 29518
+      #nodePort: 30088
+    ngapp:
+      #externalIp:
+      port: 38412
+      #nodePort: 30071
+    cfgFiles:
+      amfcfg.yaml:
+        info:
+          version: 1.0.0
+          description: AMF initial configuration
+        configuration:
+          amfDBName: sdcore_amf
+          enableDBStore: false
+          enableNrfCaching: false
+          nrfCacheEvictionInterval: 900
+          debugProfilePort: 5001
+          kafkaInfo:
+            brokerUri: "kafka"
+            brokerPort: 9092
+            topicName: "sdcore-data-source-amf"
+          ngapIpList:
+            - "0.0.0.0"
+          amfName: AMF
+          amfId: cafe00
+          nrfUri: https://nrf:29510
+          webuiUri: http://webui:5001
+          sbi:
+            scheme: https
+            bindingIPv4: "0.0.0.0"
+            registerIPv4: amf
+            tls:
+              pem: /var/run/certs/tls.crt
+              key: /var/run/certs/tls.key
+          serviceNameList:
+            - namf-comm
+            - namf-evts
+            - namf-mt
+            - namf-loc
+            - namf-oam
+          supportDnnList:
+            - internet
+          security:
+            integrityOrder:
+              - NIA1
+              - NIA2
+            cipheringOrder:
+              - NEA0
+          networkName:
+            full: Aether5G
+            short: Aether
+          networkFeatureSupport5GS: # 5gs Network Feature Support IE, refer to TS 24.501
+            enable: true # append this IE in Registration accept or not
+            imsVoPS: 0 # IMS voice over PS session indicator (uinteger, range: 0~1)
+            emc: 0 # Emergency service support indicator for 3GPP access (uinteger, range: 0~3)
+            emf: 0 # Emergency service fallback indicator for 3GPP access (uinteger, range: 0~3)
+            iwkN26: 0 # Interworking without N26 interface indicator (uinteger, range: 0~1)
+            mpsi: 0 # MPS indicator (uinteger, range: 0~1)
+            emcN3: 0 # Emergency service support indicator for Non-3GPP access (uinteger, range: 0~1)
+            mcsi: 0 # MCS indicator (uinteger, range: 0~1)
+          t3502Value: 720  # timer value (seconds) at UE side
+          t3512Value: 3600 # timer value (seconds) at UE side
+          non3gppDeregistrationTimerValue: 3240 # timer value (seconds) at UE side
+          # retransmission timer for paging message
+          t3513:
+            enable: true     # true or false
+            expireTime: 6s   # default is 6 seconds
+            maxRetryTimes: 4 # the max number of retransmission
+          # retransmission timer for NAS Deregistration Request message
+          t3522:
+            enable: true     # true or false
+            expireTime: 6s   # default is 6 seconds
+            maxRetryTimes: 4 # the max number of retransmission
+          # retransmission timer for NAS Registration Accept message
+          t3550:
+            enable: true     # true or false
+            expireTime: 6s   # default is 6 seconds
+            maxRetryTimes: 4 # the max number of retransmission
+          # retransmission timer for NAS Authentication Request/Security Mode Command message
+          t3560:
+            enable: true     # true or false
+            expireTime: 6s   # default is 6 seconds
+            maxRetryTimes: 4 # the max number of retransmission
+          # retransmission timer for NAS Notification message
+          t3565:
+            enable: true     # true or false
+            expireTime: 6s   # default is 6 seconds
+            maxRetryTimes: 4 # the max number of retransmission
+          telemetry:                                  # telemetry configuration
+            enabled: false                             # Optional; defaults to false (i.e., telemetry disabled).
+            otlp_endpoint: "otel-collector.svc:4317"  # Mandatory if enabled=true
+            ratio: 0.4                                # Optional; defaults to 1.0. If set to 0, AMF assumes 1.0.
+
+  nrf:
+    deploy: true
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":8080,"schema":"HTTP"}]'
+    serviceType: ClusterIP
+    prometheus:
+      port: 8080
+      # Provide nodePort when serviceType is NodePort
+      # nodePort:
+    sbi:
+      port: 29510
+      # Provide nodePort when serviceType is NodePort
+      #nodePort: 30070
+    cfgFiles:
+      nrfcfg.yaml:
+        info:
+          version: 1.0.0
+          description: NRF initial local configuration
+        configuration:
+          mongoDBStreamEnable: true
+          nfProfileExpiryEnable: true
+          nfKeepAliveTime: 60
+          webuiUri: http://webui:5001
+          sbi:
+            scheme: https
+            bindingIPv4: "0.0.0.0"
+            registerIPv4: nrf
+            tls:
+              pem: /var/run/certs/tls.crt
+              key: /var/run/certs/tls.key
+          serviceNameList:
+            - nnrf-nfm
+            - nnrf-disc
+
+  smf:
+    deploy: true
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":9089,"schema":"HTTP"}]'
+    serviceType: ClusterIP
+    upfPort: 8805
+    n4:
+      port: 8805
+      # Provide nodePort when serviceType is NodePort
+      #nodePort: 30021
+    prometheus:
+      port: 9089
+      # Provide nodePort when serviceType is NodePort
+      # nodePort:
+    sbi:
+      port: 29502
+      #nodePort: 30080
+    cfgFiles:
+      # https://github.com/omec-project/smf/blob/main/config/uerouting.yaml
+      uerouting.yaml:
+        info:
+          version: 1.0.0
+          description: Routing information for UE
+      # https://github.com/omec-project/smf/blob/main/config/smfcfg.yaml
+      smfcfg.yaml:
+        info:
+          version: 1.0.0
+          description: SMF initial local configuration
+        configuration:
+          smfDBName: sdcore_smf
+          enableDBStore: false
+          enableNrfCaching: false
+          nrfCacheEvictionInterval: 900
+          debugProfilePort: 5001
+          kafkaInfo:
+            brokerUri: "kafka"
+            brokerPort: 9092
+            topicName: "sdcore-data-source-smf"
+          pfcp:
+             addr: "POD_IP"
+          smfName: SMF
+          nrfUri: https://nrf:29510
+          webuiUri: http://webui:5001
+          sbi:
+            scheme: https
+            bindingIPv4: "0.0.0.0"
+            registerIPv4: smf
+            tls:
+              pem: /var/run/certs/tls.crt
+              key: /var/run/certs/tls.key
+          serviceNameList:
+            - nsmf-pdusession
+            - nsmf-event-exposure
+
+  ausf:
+    deploy: true
+    podAnnotations:
+      field.cattle.io/workloadMetrics: '[{"path":"/metrics","port":8080,"schema":"HTTP"}]'
+    serviceType: ClusterIP
+    prometheus:
+      port: 8080
+      # Provide nodePort when serviceType is NodePort
+      # nodePort:
+    sbi:
+      port: 29509
+      # Provide nodePort when serviceType is NodePort
+      #nodePort: 30082
+    cfgFiles:
+      # https://github.com/omec-project/ausf/blob/main/factory/ausfcfg.yaml
+      ausfcfg.yaml:
+        info:
+          version: 1.0.0
+          description: AUSF initial local configuration
+        configuration:
+          nrfUri: https://nrf:29510
+          webuiUri: http://webui:5001
+          enableNrfCaching: false
+          nrfCacheEvictionInterval: 900
+          sbi:
+            scheme: https
+            bindingIPv4: "0.0.0.0"
+            registerIPv4: ausf
+            tls:
+              pem: /var/run/certs/tls.crt
+              key: /var/run/certs/tls.key
+          serviceNameList:
+            - nausf-auth
+          groupId: ausfGroup001
+
+  metricfunc:
+    deploy: false
+    serviceType: ClusterIP
+    prometheus:
+      port: 9089
+    apiEndpoint:
+      port: 9301
+    cfgFiles:
+      metricscfg.yaml:
+        configuration:
+          controllerFlag: false
+          nfStreams:
+            - topic:
+                topicName: sdcore-data-source-amf
+              urls:
+                - uri: "kafka"
+                  port: 9092
+            - topic:
+                topicName: sdcore-data-source-smf
+              urls:
+                - uri: "kafka"
+                  port: 9092
+          prometheusServer:
+            addr: POD_IP
+            port: 9089
+          apiServer:
+            addr: POD_IP
+            port: 9301
+          debugProfileServer:
+            addr: POD_IP
+            port: 5001
+          userAppApiServer:
+            addr: "userAppapp"
+            port: 9301
+          rocEndPoint:
+            addr: "roc-aether-roc-gui-v2-1-external.aether-roc.svc"
+            port: 80
+          metricFuncEndPoint:
+            addr: "metricfunc.aether-5gc.svc"
+            port: 5001
+        info:
+          description: Metrics initial local configuration
+          version: 1.0.0
+        logger:
+          level: info
+
+  upfadapter:
+    # deploy:false disables the omec upf-adapter PFCP proxy AND (via configmap-smf.yaml) sets the SMF's
+    # enableUPFAdapter:false, so the SMF speaks PFCP DIRECTLY to each UPF (resolving the slice upf-name).
+    # The adapter fails on cross-cluster/edge UPFs ("Post http://upf-adapter:8090 ... operation not
+    # permitted" -> PDU session never establishes / endless T3580). Direct PFCP is what makes a remote
+    # edge UPF (reached over ClusterMesh) actually complete the session. Proven: edge-2 UE 0% loss.
+    deploy: false
+    serviceType: ClusterIP
+    n4:
+      port: 8805
+      # Provide nodePort when serviceType is NodePort
+      # nodePort: 30021
+    rest:
+      port: 8090
+      #nodePort: 30080
+    cfgFiles:
+      upfadaptercfg.yaml:
+        info:
+          version: 1.0.0
+          description: UPF Adapter initial local configuration
+        logger:
+          level: info
+        configuration:
+          kafkaInfo:
+            brokerUri: "kafka"
+            brokerPort: 9092
+            topicName: "sdcore-data-source-smf"
+
+servicemonitor:
+  enabled: false
+  additionalLabels: {}
+
+# MongoDB replica set (rs0) for the CP — rendered by templates/mongodb.yaml (NRF/UDR/WebUI need rs0).
+mongodb:
+  enabled: true
+  image: mongo:6.0
+  persistence:
+    enabled: false
+    size: 8Gi

@@ -1,0 +1,48 @@
+{{/*
+# Copyright 2020-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+
+{{- if .Values.config.webui.deploy }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: webui
+  labels:
+{{ tuple "webui" . | include "5g-control-plane.metadata_labels" | indent 4 }}
+{{- with .Values.config.webui.serviceAnnotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+{{- end }}
+spec:
+  type: {{ .Values.config.webui.serviceType }}
+  selector:
+{{ tuple "webui" . | include "5g-control-plane.metadata_labels" | indent 4 }}
+  ports:
+  - name: prometheus-exporter
+    port: {{ .Values.config.webui.prometheus.port }}
+    protocol: TCP
+{{- if eq .Values.config.webui.serviceType "NodePort" }}
+{{- if .Values.config.webui.prometheus.nodePort }}
+    nodePort: {{ .Values.config.webui.prometheus.nodePort }}
+{{- end }}
+{{- end }}
+  - name: urlport-http
+    port: {{ .Values.config.webui.urlport.port }}
+    protocol: TCP
+{{- if eq .Values.config.webui.serviceType "NodePort" }}
+{{- if .Values.config.webui.urlport.nodePort }}
+    nodePort: {{ .Values.config.webui.urlport.nodePort }}
+{{- end }}
+{{- end }}
+  - name: rest
+    port: {{ .Values.config.webui.rest.port }}
+    protocol: TCP
+{{- if eq .Values.config.webui.serviceType "NodePort" }}
+{{- if .Values.config.webui.rest.nodePort }}
+    nodePort: {{ .Values.config.webui.rest.nodePort }}
+{{- end }}
+{{- end }}
+{{- end }}

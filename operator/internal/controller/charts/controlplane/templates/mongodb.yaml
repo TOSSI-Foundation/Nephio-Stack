@@ -1,0 +1,83 @@
+# MongoDB replica set (rs0) for the SD-Core control plane. NRF/UDR/WebUI require a REPLICA SET
+# (single-member rs0 is fine) or NRF exit-134 crash-loops. The upstream omec chart strips mongo, so
+# the operator renders it here -> `NFDeployment{controlplane}` brings mongo up hands-free.
+{{- if .Values.mongodb.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongodb-headless
+  labels: { app: mongodb }
+spec:
+  clusterIP: None
+  selector: { app: mongodb }
+  ports:
+    - { name: mongodb, port: 27017, targetPort: 27017 }
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: mongodb
+  labels: { app: mongodb }
+spec:
+  serviceName: mongodb-headless
+  replicas: 1
+  selector: { matchLabels: { app: mongodb } }
+  template:
+    metadata: { labels: { app: mongodb } }
+    spec:
+      containers:
+        - name: mongodb
+          image: {{ .Values.mongodb.image | quote }}
+          args: ["--replSet", "rs0", "--bind_ip_all"]
+          ports: [ { containerPort: 27017 } ]
+          readinessProbe:
+            exec: { command: ["mongosh", "--quiet", "--eval", "db.adminCommand('ping')"] }
+            initialDelaySeconds: 5
+            periodSeconds: 5
+{{- if .Values.mongodb.persistence.enabled }}
+          volumeMounts: [ { name: data, mountPath: /data/db } ]
+  volumeClaimTemplates:
+    - metadata: { name: data }
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources: { requests: { storage: {{ .Values.mongodb.persistence.size | quote }} } }
+{{- end }}
+---
+# One-shot idempotent replica-set initiation. Hook so it runs after the StatefulSet and is retried.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mongodb-rs-init
+  annotations:
+    "helm.sh/hook": post-install,post-upgrade
+    "helm.sh/hook-weight": "1"
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  backoffLimit: 30
+  template:
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: rs-init
+          image: {{ .Values.mongodb.image | quote }}
+          command:
+            - /bin/bash
+            - -c
+            - |
+              # Wait for mongod to answer, THEN initiate rs0 and BLOCK until a PRIMARY is actually elected.
+              # The old one-shot `try{rs.status()}catch{rs.initiate()}` exited 0 even when initiate raced
+              # ahead of a ready mongod and failed — the helm hook then deleted the "succeeded" job and the
+              # replica set was never formed (NRF aborts on its change-stream). Loop + verify + exit-non-zero
+              # so the Job's backoffLimit actually retries until rs0 is PRIMARY. Idempotent on re-run.
+              H=mongodb-0.mongodb-headless
+              until mongosh --host $H --quiet --eval 'db.adminCommand("ping")' >/dev/null 2>&1; do
+                echo "waiting for mongodb..."; sleep 3; done
+              for i in $(seq 1 40); do
+                STATE=$(mongosh --host $H --quiet --eval 'try{rs.status().members[0].stateStr}catch(e){"none"}' 2>/dev/null | tail -1)
+                if [ "$STATE" = "PRIMARY" ]; then echo "rs0 PRIMARY — done"; exit 0; fi
+                echo "rs0 state=$STATE — (re)initiating…"
+                mongosh --host $H --quiet --eval 'try{ if(!rs.status().ok){throw 0} }catch(e){ rs.initiate({_id:"rs0", members:[{_id:0, host:"mongodb-0.mongodb-headless:27017"}]}) }' >/dev/null 2>&1 || true
+                sleep 3
+              done
+              echo "rs0 never reached PRIMARY"; exit 1
+{{- end }}

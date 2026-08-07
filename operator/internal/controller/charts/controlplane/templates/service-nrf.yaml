@@ -1,0 +1,40 @@
+{{/*
+# Copyright 2020-present Open Networking Foundation
+
+# SPDX-License-Identifier: Apache-2.0
+*/}}
+
+{{- if .Values.config.nrf.deploy }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nrf
+  labels:
+{{ tuple "nrf" . | include "5g-control-plane.metadata_labels" | indent 4 }}
+spec:
+  type: {{ .Values.config.nrf.serviceType }}
+{{- if .Values.config.nrf.externalIp }}
+  externalIPs:
+    - {{ .Values.config.nrf.externalIp }}
+{{- end }}
+  selector:
+{{ tuple "nrf" . | include "5g-control-plane.metadata_labels" | indent 4 }}
+  ports:
+  - name: prometheus-exporter
+    port: {{ .Values.config.nrf.prometheus.port }}
+    protocol: TCP
+{{- if eq .Values.config.nrf.serviceType "NodePort" }}
+{{- if .Values.config.nrf.prometheus.nodePort }}
+    nodePort: {{ .Values.config.nrf.prometheus.nodePort }}
+{{- end }}
+{{- end }}
+  - name: sbi
+    port: {{ .Values.config.nrf.sbi.port }}
+    protocol: TCP
+{{- if eq .Values.config.nrf.serviceType "NodePort" }}
+{{- if .Values.config.nrf.sbi.nodePort }}
+    nodePort: {{ .Values.config.nrf.sbi.nodePort }}
+{{- end }}
+{{- end }}
+{{- end }}
