@@ -1,0 +1,9 @@
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: SDCoreDeployment
+metadata:
+  labels:
+    app.kubernetes.io/name: sdcore-operator
+    app.kubernetes.io/managed-by: kustomize
+  name: sdcoredeployment-sample
+spec:
+  # TODO(user): Add fields here

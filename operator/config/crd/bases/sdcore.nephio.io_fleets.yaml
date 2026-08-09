@@ -1,0 +1,271 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.21.0
+  name: fleets.sdcore.nephio.io
+spec:
+  group: sdcore.nephio.io
+  names:
+    kind: Fleet
+    listKind: FleetList
+    plural: fleets
+    singular: fleet
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .status.sites
+      name: Sites
+      type: integer
+    - jsonPath: .status.message
+      name: Message
+      type: string
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Fleet is the top-level fleet intent: one object listing every server as {server, role}. It is the single
+          source of truth for "which servers run what", and the exact artifact GitOps (Argo CD / Config Sync)
+          reconciles.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              FleetSpec is the WHOLE fleet as a single intent: a list of {server, role}. The Fleet controller expands
+              each entry into an EdgeSite (which the EdgeSite controller then expands into cluster/CP/UPF packages).
+              Add an entry -> a site is onboarded; remove an entry -> that site's EdgeSite is deleted (owner-GC tears
+              the whole site down). One tiny declaration; Nephio does the fan-out.
+            properties:
+              sites:
+                items:
+                  description: |-
+                    FleetSite is the MINIMAL intent per server — just an IP and a role. Everything else (the site name, its
+                    cluster, the per-site addressing, all the packages) is DERIVED by the controllers. This is the whole
+                    point of Nephio here: you declare the least you possibly can.
+                  properties:
+                    name:
+                      description: Name optionally pins the site/cluster name; if
+                        empty it is derived stably from the server IP.
+                      type: string
+                    ran:
+                      description: 'RAN (optional): deploy an OCUDU gNB on this site,
+                        auto-connected to its SD-Core (cp+upf sites only).'
+                      properties:
+                        cell:
+                          description: |-
+                            Cell: NR cell radio parameters you tweak by hand (defaults suit band n78, 100 MHz, 30 kHz SCS).
+                            Used only when `config` is empty (the generated/zmq path).
+                          properties:
+                            band:
+                              default: n78
+                              type: string
+                            bandwidthMHz:
+                              default: 100
+                              type: integer
+                            commonScs:
+                              default: 30
+                              type: integer
+                            dlArfcn:
+                              default: 632628
+                              type: integer
+                            pci:
+                              default: 1
+                              type: integer
+                          type: object
+                        config:
+                          description: |-
+                            Config: a full OCUDU gnb.yaml for a REAL radio (the ru_sdr + cell_cfg + everything). RF is hardware-
+                            and deployment-specific, so it is NOT baked into the operator — you provide your proven config here.
+                            The operator deploys it as-is with only the AMF resolved: set `amf.addr: AMF_ADDR` (auto-substituted
+                            with the core's AMF), and tac/sd/plmn to the fleet values (tac 1, sd 102030, plmn 00101). When empty,
+                            the operator generates a simple self-consistent config from `cell` (used for the zmq simulator).
+                          type: string
+                        cpuset:
+                          description: |-
+                            Cpuset: for a real-radio (UHD) gNB, the isolated CPU cores to pin the gNB to (taskset -c). Real-time
+                            RF needs the process on isolated cores (host isolcpus) or the L1 jitters (PRACH loss / underflow).
+                            Defaults to "0-15". Ignored for zmq.
+                          type: string
+                        device:
+                          default: zmq
+                          description: |-
+                            Device: the radio for split 8. "zmq" = RF simulator (NO hardware — runs on a VM, provable end-to-end);
+                            "n310"/"b210"/"x310" = a USRP SDR (needs the device + host real-time tuning). A non-zmq device makes
+                            the gNB run hostNetwork + privileged with the host's UHD/DPDK/MKL libs mounted (it drives real RF).
+                          enum:
+                          - zmq
+                          - n310
+                          - b210
+                          - x310
+                          type: string
+                        ldLibraryPath:
+                          description: |-
+                            LdLibraryPath: for a real-radio (UHD) gNB, the LD_LIBRARY_PATH the host binary needs (UHD/DPDK/MKL).
+                            Defaults to the standard UHD + Intel oneAPI install layout; override if your host differs.
+                          type: string
+                        ofh:
+                          description: |-
+                            Ofh: Open Fronthaul (split 7.2) parameters. Only used when split=="7.2" — points the DU at an
+                            external O-RU over a raw-socket/DPDK fronthaul NIC. Requires real hardware + PTP (Phase 3).
+                          properties:
+                            duMac:
+                              description: 'DuMac: the DU/host fronthaul NIC MAC address
+                                (fronthaul source).'
+                              type: string
+                            interface:
+                              description: 'Interface: the fronthaul NIC name (raw-socket
+                                mode) or PCIe address like "0000:01:00.1" (DPDK mode).'
+                              type: string
+                            ruMac:
+                              description: 'RuMac: the O-RU''s MAC address (fronthaul
+                                destination).'
+                              type: string
+                            vlanTag:
+                              default: 3
+                              description: 'VlanTag: the C-plane/U-plane VLAN tag
+                                on the fronthaul (1..4094).'
+                              type: integer
+                          type: object
+                        radioAddr:
+                          description: |-
+                            RadioAddr: OPTIONAL override for the SDR's streaming address. The detect initContainer auto-discovers
+                            the radio (uhd_find_devices) — set this only when it can't be inferred, e.g. an N310 whose 10G data
+                            SFP is on a different subnet than its mgmt port. USB radios (b210) need nothing here.
+                          type: string
+                        radioNic:
+                          description: |-
+                            RadioNic: for a NETWORKED SDR (N310/X310), the host NIC on the radio's data L2. The (non-hostNetwork)
+                            gNB gets a jumbo macvlan on it so it can stream to the radio at MTU 9000 — a plain cluster-CNI pod
+                            (1500 MTU, masqueraded) can't carry the radio traffic. USB (b210) / fronthaul (O-RU) leave this empty.
+                          type: string
+                        split:
+                          default: "8"
+                          description: |-
+                            Split: the O-RAN functional split. "8" = the SDR is driven directly (device below); "7.2" = Open
+                            Fronthaul to an external O-RU.
+                          enum:
+                          - "8"
+                          - "7.2"
+                          type: string
+                        stack:
+                          default: ocudu
+                          description: 'Stack: the gNB software. "ocudu" = the official
+                            OCUDU project (srsRAN''s LF successor).'
+                          enum:
+                          - ocudu
+                          type: string
+                      type: object
+                    role:
+                      default: upf-only
+                      description: |-
+                        Role: "cp+upf" = a self-contained 5G core on this server; "upf-only" = an edge UPF steered by the
+                        mgmt control plane. Defaults to upf-only.
+                      enum:
+                      - cp+upf
+                      - upf-only
+                      type: string
+                    server:
+                      description: Server is the bare server's host IP (a BYOH-registered
+                        host).
+                      type: string
+                    user:
+                      description: |-
+                        User is the SSH login the mgmt node uses to onboard this server (push the BYOH agent + bootstrap the
+                        edge platform). Empty = the mgmt node's own login. Set it when the target's login differs (e.g. "one").
+                      type: string
+                  required:
+                  - server
+                  type: object
+                type: array
+            required:
+            - sites
+            type: object
+          status:
+            description: FleetStatus reports how many sites are declared and the last
+              reconcile outcome.
+            properties:
+              conditions:
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+              message:
+                type: string
+              sites:
+                type: integer
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

@@ -1,0 +1,158 @@
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: manager-role
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - nodes
+  - pods
+  - services
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - ""
+  resources:
+  - pods/exec
+  verbs:
+  - create
+- apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - '*'
+  resources:
+  - '*'
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - config.porch.kpt.dev
+  resources:
+  - packagevariants
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ipam.resource.nephio.org
+  resources:
+  - ipclaims
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - ipam.resource.nephio.org
+  resources:
+  - networkinstances
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - sdcore.nephio.io
+  resources:
+  - edgesites
+  - meshlinks
+  - sdcoredeployments
+  verbs:
+  - create
+  - delete
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - sdcore.nephio.io
+  resources:
+  - edgesites/status
+  - fleets/status
+  - meshlinks/status
+  - networkfabrics/status
+  - networkslices/status
+  - sdcoredeployments/status
+  - subscribers/status
+  - upfdatapaths/status
+  verbs:
+  - get
+  - patch
+  - update
+- apiGroups:
+  - sdcore.nephio.io
+  resources:
+  - fleets
+  - networkfabrics
+  - networkslices
+  - subscribers
+  - upfdatapaths
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - sdcore.nephio.io
+  resources:
+  - sdcoredeployments/finalizers
+  verbs:
+  - update
+- apiGroups:
+  - vlan.resource.nephio.org
+  resources:
+  - vlanindices
+  verbs:
+  - create
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - workload.nephio.org
+  resources:
+  - nfdeployments
+  verbs:
+  - get
+  - list
+  - patch
+  - update
+  - watch
+- apiGroups:
+  - workload.nephio.org
+  resources:
+  - nfdeployments/status
+  verbs:
+  - get
+  - patch
+  - update
