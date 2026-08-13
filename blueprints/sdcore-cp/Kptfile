@@ -1,0 +1,16 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: sdcore-cp
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: SD-Core 5G control plane blueprint. Deployed to site-type=regional; SMF N4 specialized onto vpc-internal.
+pipeline:
+  mutators:
+    - image: ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.4
+      configPath: package-context.yaml
+    - image: docker.io/nephio/nfdeploy-fn@sha256:f7e18f99c1836b18c5081b5f122c27d5a0161c7cfcb689ce69077b82b8b27718
+    - image: docker.io/nephio/interface-fn@sha256:7fd49249b48bd7fe4ef1b3c3c3b600cc321e3c7046db53611ab01fa23b58c8c5
+    - image: docker.io/nephio/nad-fn@sha256:d3ff4f02aa9b06d5f6124ed04ef138051636cb127b86dff926ae2edd0f791857
+    - image: docker.io/nephio/nfdeploy-fn@sha256:f7e18f99c1836b18c5081b5f122c27d5a0161c7cfcb689ce69077b82b8b27718

@@ -1,0 +1,8 @@
+# SD-Core control plane. provider: controlplane.sdcore.io -> our operator renders the full CP
+# (amf/smf/nrf/ausf/nssf/pcf/udm/udr/webui + mongo replica-set).
+apiVersion: workload.nephio.org/v1alpha1
+kind: NFDeployment
+metadata:
+  name: sdcore-cp
+spec:
+  provider: controlplane.sdcore.io

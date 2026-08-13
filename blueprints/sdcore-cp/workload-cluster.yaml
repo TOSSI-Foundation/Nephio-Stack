@@ -1,0 +1,18 @@
+# WorkloadCluster CONTEXT for the specializer pipeline (interface-fn / nad-fn read spec.masterInterface
+# + cnis to build the N4 macvlan NAD). local-config so it is NOT applied to the cluster — it only feeds
+# the kpt functions so the blueprint RENDERS + PUBLISHES. When a PackageVariant clones this for a real
+# EdgeSite, config-injection overwrites spec with the target cluster's actual values. Without this the
+# functions hard-fail "workload cluster is missing from the kpt package" and the blueprint can't publish.
+apiVersion: infra.nephio.org/v1alpha1
+kind: WorkloadCluster
+metadata:
+  name: cluster
+  annotations:
+    config.kubernetes.io/local-config: "true"
+spec:
+  clusterName: cluster
+  cnis:
+  - macvlan
+  - ipvlan
+  - sriov
+  masterInterface: eth1

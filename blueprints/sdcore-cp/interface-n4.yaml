@@ -1,0 +1,16 @@
+# The SMF's N4 on the SHARED vpc-internal fabric. This is the CP side of the cross-cluster fix:
+# the central SMF gets an IP on the same fabric as every edge UPF, so SMF<->UPF PFCP reaches
+# across clusters. (In the sandbox this was missing -> SMF on the pod net couldn't reach the
+# edge UPF; specialization onto vpc-internal is what makes distributed SD-Core actually work.)
+apiVersion: req.nephio.org/v1alpha1
+kind: Interface
+metadata:
+  name: n4
+  annotations:
+    nephio.org/network-name: n4
+    config.kubernetes.io/local-config: "true"
+spec:
+  networkInstance:
+    name: vpc-internal
+  cniType: macvlan
+  attachmentType: vlan
