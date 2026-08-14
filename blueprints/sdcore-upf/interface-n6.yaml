@@ -1,0 +1,13 @@
+# N6 (UPF->internet). On vpc-internet; IPAM allocates the address + the UE pool egress.
+apiVersion: req.nephio.org/v1alpha1
+kind: Interface
+metadata:
+  name: n6
+  annotations:
+    nephio.org/network-name: n6
+    config.kubernetes.io/local-config: "true"
+spec:
+  networkInstance:
+    name: vpc-internet
+  cniType: macvlan
+  attachmentType: vlan

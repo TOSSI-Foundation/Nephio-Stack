@@ -1,0 +1,13 @@
+# The data network + UE IP pool. IPAM carves a per-site pool from vpc-internet so each edge
+# UPF gets non-overlapping UE addresses automatically (no hand-picked 10.9.0.0/24 per site).
+apiVersion: req.nephio.org/v1alpha1
+kind: DataNetwork
+metadata:
+  name: internet
+  annotations:
+    config.kubernetes.io/local-config: "true"
+spec:
+  networkInstance:
+    name: vpc-internet
+  pools:
+    - prefixLength: 16

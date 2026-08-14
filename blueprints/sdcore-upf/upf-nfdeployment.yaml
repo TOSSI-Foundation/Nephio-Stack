@@ -1,0 +1,8 @@
+# The high-level NF CR. Starts almost empty; specialization fills interfaces + pools.
+# provider: upf.sdcore.io  ->  OUR sdcore-operator picks it up (vs upf.free5gc.io for free5GC).
+apiVersion: workload.nephio.org/v1alpha1
+kind: NFDeployment
+metadata:
+  name: sdcore-upf
+spec:
+  provider: upf.sdcore.io
