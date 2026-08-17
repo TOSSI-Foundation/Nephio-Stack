@@ -1,0 +1,14 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: multus
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: |
+    Multus thick CNI (NetworkAttachmentDefinition CRD + kube-multus-ds DaemonSet + RBAC/config),
+    delivered the pure-Nephio way — a blueprint fanned out per cluster by the EdgeSite controller and
+    Config-Synced onto the cluster (the same way real Nephio's workload-cluster bundle ships pv-multus).
+    Multus delegates to the cluster's primary CNI (CK8s Cilium) and adds the UPF's N3/N6 secondary
+    interfaces. Cluster infra, so it's delivered exactly once per cluster (named by the deploy repo),
+    NOT installed from the Makefile.
