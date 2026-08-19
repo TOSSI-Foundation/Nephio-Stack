@@ -1,0 +1,76 @@
+# sdcore-datapath — per-node node-agent that reconciles every UPFDataPath CR to reality.
+#
+# This is the "distributed actuation" pillar of the Nephio thesis, done the thesis-native way: NOT a bash
+# reconcile.sh looping in a ConfigMap, but the SAME operator binary run in `--node-agent` mode — a real
+# controller-runtime reconcile loop (UPFDataPathReconciler) that programs the host + BESS datapath through
+# typed libraries (netlink, go-iptables), not by shelling out. It runs on each edge node (hostNetwork, so
+# netlink acts on the host's own namespace) and continuously drives the host + BESS datapath to the
+# declared UPFDataPath desired-state, so the UE ping is self-healing (survives UPF restarts, ARP staleness,
+# pipeline reprogramming) with no imperative bring-up and no ConfigMap script to reload.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: sdcore-datapath, namespace: kube-system }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: { name: sdcore-datapath }
+rules:
+  - apiGroups: ["sdcore.nephio.io"]
+    resources: ["upfdatapaths", "upfdatapaths/status"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  # pods/exec is the one unavoidable pod-reach: BESS has no KRM/host path, so the node-agent execs
+  # `bessctl accessRoutes add` in the local UPF pod (scoped to the UPF's own datapath). pods/log lets the
+  # pfcp-heal step read the pfcp-agent log to detect the "datapath down" PFCP stall and bounce pfcpiface.
+  # WATCH is required, not just get/list: the controller-runtime client backs List/Get with an informer
+  # CACHE that WATCHes. Without watch the pods informer never syncs, cache.WaitForCacheSync stalls, and the
+  # UPFDataPath reconcile silently stops running its steps — so n6-nat (UE-pool MASQUERADE), access-route,
+  # and upf-heal never execute (observed live: a cp+upf core registered a UE + got a PDU session but had no
+  # internet because the UE-pool SNAT was never programmed).
+  - apiGroups: [""]
+    resources: ["pods", "pods/exec", "pods/log"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  # n2-vip: read Services labeled sdcore.nephio.io/expose=n2 to own ARP for their LB VIPs on the RAN NIC
+  # (Cilium's L2 announcer can't run on CK8s — kubeProxyReplacement is force-reverted by its reconciler).
+  - apiGroups: [""]
+    resources: ["services"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: sdcore-datapath }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: sdcore-datapath }
+subjects:
+  - { kind: ServiceAccount, name: sdcore-datapath, namespace: kube-system }
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata: { name: sdcore-datapath, namespace: kube-system }
+spec:
+  selector: { matchLabels: { app: sdcore-datapath } }
+  template:
+    metadata: { labels: { app: sdcore-datapath } }
+    spec:
+      serviceAccountName: sdcore-datapath
+      # hostNetwork so netlink/iptables/sysctl program the HOST namespace directly (no nsenter).
+      hostNetwork: true
+      tolerations: [{ operator: Exists }]
+      containers:
+        - name: agent
+          # the operator image, run as the node-agent. kpt-set ${operator-image} keeps it on the published
+          # operator tag; the edge platform bootstrap loads this image into the edge containerd.
+          image: sdcore-operator:v0.1.48 # kpt-set: operator-image
+          imagePullPolicy: IfNotPresent
+          command: ["/manager"]
+          args: ["--node-agent"]
+          # MUST run as root: the operator image ships USER 65532 (nonroot), and even privileged, a nonroot
+          # process has an empty effective capability set -> netlink LinkSetUp/AddrAdd fail EPERM ("operation
+          # not permitted"). runAsUser:0 + runAsNonRoot:false give it CAP_NET_ADMIN to program the host.
+          securityContext:
+            privileged: true
+            runAsUser: 0
+            runAsNonRoot: false
+          env:
+            # the node this pod runs on — the agent stamps it into UPFDataPath.status.node.
+            - name: NODE_NAME
+              valueFrom: { fieldRef: { fieldPath: spec.nodeName } }

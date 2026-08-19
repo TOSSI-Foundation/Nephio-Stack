@@ -1,0 +1,14 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: datapath-actuator
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: |
+    The edge datapath control layer, delivered the pure-Nephio way (a blueprint fanned out per site by
+    the EdgeSite controller, Config-Synced to the site's cluster) — NOT a bash/Makefile install. It
+    carries the UPFDataPath CRD + the per-node sdcore-datapath DaemonSet that continuously reconciles
+    each UPFDataPath CR (emitted by the edge-site blueprint) to the real host + BESS datapath. This is
+    the "distributed actuation" that makes the UE ping self-healing (bridges/routes/ARP/accessRoutes),
+    with no imperative bring-up. Cluster-scoped infra: exactly one instance per cluster.
