@@ -1,0 +1,27 @@
+# TWO context ConfigMaps:
+#  * kptfile.kpt.dev  is MANAGED BY PORCH — on clone it regenerates this with ONLY `data.name` (the
+#    package name), dropping any custom keys. So we only ever read `name` from it.
+#  * cluster-vars     is OURS — Porch preserves it, so per-site values (the control-plane host IP)
+#    live here. local-config = used by functions during render, never applied to the cluster.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kptfile.kpt.dev
+  annotations:
+    config.kubernetes.io/local-config: "true"
+data:
+  name: cluster-name
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: cluster-vars
+  annotations:
+    config.kubernetes.io/local-config: "true"
+data:
+  control-plane-host: "0.0.0.0"    # the target host's reachable IP; set per-site by the intent
+  # NON-overlapping per-edge CIDRs (set from EdgeSite.spec.podCIDR by the PackageVariantSet).
+  # Distinct pod CIDRs are what let N4/PFCP + ClusterMesh work cleanly WITHOUT the L2/adapter
+  # workarounds — the root-cause fix for the overlap pain.
+  pod-cidr: "10.1.0.0/16"
+  svc-cidr: "10.152.183.0/24"

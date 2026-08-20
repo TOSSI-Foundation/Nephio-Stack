@@ -1,0 +1,36 @@
+# Fills the per-site placeholders (cluster name, host endpoint) from package-context, so the same
+# blueprint stamps a correctly-named, correctly-addressed cluster on every server.
+#
+# IMPORTANT: target by KIND, not by name. All pieces share the name "cluster-name", so a
+# `select: {name: cluster-name}` would match multiple kinds and try to set fields a kind doesn't
+# have (e.g. controlPlaneRef on ByoCluster) — which Porch's function evaluator rejects. Selecting
+# by kind and listing only that kind's real fields keeps render valid in Porch.
+apiVersion: fn.kpt.dev/v1alpha1
+kind: ApplyReplacements
+metadata:
+  name: cluster-params
+  annotations:
+    config.kubernetes.io/local-config: "true"
+replacements:
+  # one shared name across the Cluster + its infra/control-plane + all cross-references
+  - source: {kind: ConfigMap, name: kptfile.kpt.dev, fieldPath: data.name}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths: [metadata.name, spec.controlPlaneRef.name, spec.infrastructureRef.name]
+      - select: {kind: ByoCluster}
+        fieldPaths: [metadata.name]
+      - select: {kind: CK8sControlPlane}
+        fieldPaths: [metadata.name, spec.machineTemplate.infrastructureTemplate.name]
+      - select: {kind: ByoMachineTemplate}
+        fieldPaths: [metadata.name]
+  # per-edge values come from the EdgeSite injected by the PackageVariant (edgesite-injection.yaml,
+  # kpt.dev/config-injection: required). apply-replacements sources its spec fields.
+  - source: {kind: EdgeSite, fieldPath: spec.server}
+    targets:
+      - select: {kind: ByoCluster}
+        fieldPaths: [spec.controlPlaneEndpoint.host]
+  # per-edge NON-overlapping pod CIDR -> the CAPI Cluster networking (root-cause fix for overlap)
+  - source: {kind: EdgeSite, fieldPath: spec.podCIDR}
+    targets:
+      - select: {kind: Cluster}
+        fieldPaths: [spec.clusterNetwork.pods.cidrBlocks.0]

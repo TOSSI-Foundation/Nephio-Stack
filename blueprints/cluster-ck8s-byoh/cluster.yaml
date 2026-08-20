@@ -1,0 +1,34 @@
+# The CAPI Cluster + BYOH infrastructure binding.
+# Cluster.controlPlaneRef -> CK8sControlPlane (Canonical K8s distro).
+# Cluster.infrastructureRef -> ByoCluster (machines come from registered BYOH hosts).
+apiVersion: cluster.x-k8s.io/v1beta1
+kind: Cluster
+metadata:
+  name: cluster-name       # replaced from package-context (nephio.org/cluster-name)
+  labels:
+    nephio.org/site-type: edge
+spec:
+  clusterNetwork:
+    pods:
+      cidrBlocks: ["10.1.0.0/16"]
+    services:
+      cidrBlocks: ["10.152.183.0/24"]
+  controlPlaneRef:
+    apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+    kind: CK8sControlPlane
+    name: cluster-name
+  infrastructureRef:
+    apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+    kind: ByoCluster
+    name: cluster-name
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: ByoCluster
+metadata:
+  name: cluster-name
+spec:
+  # control-plane endpoint = the host's reachable IP (set per-site by the injector)
+  controlPlaneEndpoint:
+    host: "0.0.0.0"        # replaced with the target host IP
+    port: 6443
+  bundleLookupBaseRegistry: ""   # CK8s installs the distro; no BYOH k8s bundle needed

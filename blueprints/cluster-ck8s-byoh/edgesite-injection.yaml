@@ -1,0 +1,13 @@
+# Config-injection point: the PackageVariant `injectors` replaces this stub's spec with the real
+# EdgeSite's spec (matched by GVK). apply-replacements then sources the per-edge values from it.
+# local-config = never applied to the cluster; it only feeds the render pipeline.
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: EdgeSite
+metadata:
+  name: edge
+  annotations:
+    config.kubernetes.io/local-config: "true"
+    kpt.dev/config-injection: "required"
+spec:
+  server: "0.0.0.0"        # <- replaced by injected EdgeSite.spec.server
+  podCIDR: "10.1.0.0/16"   # <- replaced by injected EdgeSite.spec.podCIDR

@@ -1,0 +1,19 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: cluster-ck8s-byoh
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: |
+    Provision a PRODUCTION Canonical Kubernetes cluster on existing hosts (BYOH).
+    CAPI axes: infrastructure = BYOH (existing servers), bootstrap+control-plane = Canonical K8s (CK8s).
+    Swap the infra provider (metal3/MAAS/cloud) by changing only the ByoCluster/ByoMachineTemplate refs.
+    Parameters (cluster-name, control-plane-endpoint, replicas) are set by the WorkloadCluster
+    injector + set-annotations, so ONE intent (a WorkloadCluster) drives it.
+pipeline:
+  mutators:
+    # apply-replacements propagates package-context (name, control-plane-host, replicas) into the
+    # Cluster/ByoCluster/CK8sControlPlane. That's all the parameterization this package needs.
+    - image: ghcr.io/kptdev/krm-functions-catalog/apply-replacements:v0.1.1
+      configPath: apply-replacements.yaml

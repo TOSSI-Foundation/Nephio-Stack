@@ -1,0 +1,25 @@
+apiVersion: config.porch.kpt.dev/v1alpha1
+kind: PackageVariant
+# Auto-install the SD-Core operator on every provisioned workload cluster, so a fanned-out
+# UPF/CP NFDeployment has its controller present with zero manual steps. Staged like the other
+# bootstrap packages (mgmt-staging -> synced to the cluster by its RootSync).
+metadata:
+  name: example-sdcore-operator
+spec:
+  annotations:
+    approval.nephio.org/policy: initial
+  upstream:
+    package: sdcore-operator
+    repo: blueprints
+    workspaceName: main
+  downstream:
+    package: example-sdcore-operator
+    repo: mgmt-staging
+  injectors:
+  - kind: WorkloadCluster
+    name: example
+  pipeline:
+    mutators:
+    - image: ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.4
+      configMap:
+        nephio.org/cluster-name: example

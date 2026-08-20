@@ -1,0 +1,30 @@
+# The Canonical Kubernetes control plane, installed onto the registered host.
+# CK8sControlPlane = the Canonical K8s distro provider (installs `k8s` + bootstraps it).
+# ByoMachineTemplate = "use a registered host" (the machine binds to a ByoHost the agent created).
+apiVersion: controlplane.cluster.x-k8s.io/v1beta2
+kind: CK8sControlPlane
+metadata:
+  name: cluster-name
+spec:
+  replicas: 1                       # 1 = single node; 3 = HA (set per-site)
+  version: v1.32.0
+  machineTemplate:
+    infrastructureTemplate:
+      apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+      kind: ByoMachineTemplate
+      name: cluster-name
+  spec:
+    controlPlane:
+      # Host has NO pre-existing containerd (register-host.sh no longer installs one), so CK8s uses
+      # its default containerd path cleanly. (For a host that MUST keep Docker, set containerd-base-dir
+      # via a full bootstrapConfig — note: a partial bootstrapConfig corrupts the generated config YAML.)
+      extraKubeAPIServerArgs:
+        --anonymous-auth: "false"
+---
+apiVersion: infrastructure.cluster.x-k8s.io/v1beta1
+kind: ByoMachineTemplate
+metadata:
+  name: cluster-name
+spec:
+  template:
+    spec: {}                        # empty = pick any available registered host in this namespace

@@ -1,0 +1,23 @@
+apiVersion: config.porch.kpt.dev/v1alpha1
+kind: PackageVariant
+metadata:
+  name: example-cluster
+spec:
+  annotations:
+    approval.nephio.org/policy: initial
+  upstream:
+    # THE swap: instead of KIND/CAPD, provision Canonical K8s on a BYOH host (our blueprint).
+    package: cluster-ck8s-byoh
+    repo: blueprints
+    workspaceName: main
+  downstream:
+    package: example-cluster
+    repo: mgmt
+  injectors:
+  - kind: WorkloadCluster
+    name: example
+  pipeline:
+    mutators:
+    - image: ghcr.io/kptdev/krm-functions-catalog/set-annotations:v0.1.4
+      configMap:
+        nephio.org/cluster-name: example
