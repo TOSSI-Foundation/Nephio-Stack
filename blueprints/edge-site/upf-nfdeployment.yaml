@@ -1,0 +1,25 @@
+# Edge UPF — rendered by the SD-Core operator into a BESS-UPF (bridge CNI, af_packet).
+apiVersion: workload.nephio.org/v1alpha1
+kind: NFDeployment
+metadata:
+  name: sdcore-upf # kpt-set: sdcore-upf-${edge-name}
+  namespace: default
+spec:
+  provider: upf.sdcore.io
+  interfaces:
+    - name: n3
+      ipv4:
+        address: "10.212.0.10/24" # kpt-set: ${upf-access-cidr}
+        gateway: "10.212.0.1"     # kpt-set: ${access-gw}
+    - name: n6
+      ipv4:
+        address: "10.213.0.10/24" # kpt-set: ${upf-core-cidr}
+        gateway: "10.213.0.1"     # kpt-set: ${core-gw}
+  networkInstances:
+    - name: vpc-internet
+      dataNetworks:
+        - name: internet
+          pool:
+            - prefix: "172.251.0.0/16" # kpt-set: ${ue-pool}
+      interfaces:
+        - n6

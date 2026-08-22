@@ -1,0 +1,15 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: edge-site
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: |
+    Blueprint for ONE 5G edge user-plane: the BESS-UPF (NFDeployment) + its UPFDataPath. Fanned out
+    per EdgeSite; specialized by injecting the EdgeSite (config-injection) and sourcing spec.* via
+    apply-replacements. Config-Synced to that edge's cluster.
+pipeline:
+  mutators:
+    - image: ghcr.io/kptdev/krm-functions-catalog/apply-replacements:v0.1.1
+      configPath: apply-replacements.yaml

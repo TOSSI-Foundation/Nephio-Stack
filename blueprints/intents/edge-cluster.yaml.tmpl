@@ -1,0 +1,25 @@
+# The per-edge CLUSTER intent (one PackageVariant = "provision Canonical K8s on host HOST_IP").
+# deploy-5g substitutes EDGE_NAME + HOST_IP per server and applies it. Nephio does the rest:
+#   Porch renders+approves -> writes to mgmt repo -> Config Sync applies -> CAPI+CK8s+BYOH provision.
+#
+# The starlark mutator writes the per-site host IP into our cluster-vars ConfigMap during render;
+# apply-replacements (in the cluster-ck8s-byoh Kptfile) then propagates it into the ByoCluster
+# endpoint. (packageContext can't be used — Porch applies it AFTER render.)
+apiVersion: config.porch.kpt.dev/v1alpha1
+kind: PackageVariant
+metadata:
+  name: EDGE_NAME-cluster
+  namespace: default
+spec:
+  upstream: {repo: blueprints, package: cluster-ck8s-byoh, workspaceName: main}
+  downstream: {repo: mgmt, package: EDGE_NAME-cluster}
+  annotations:
+    approval.nephio.org/policy: initial      # auto-approve -> auto-publish -> Config Sync applies
+  pipeline:
+    mutators:
+    - image: ghcr.io/kptdev/krm-functions-catalog/starlark:v0.4.3
+      configMap:
+        source: |
+          for r in ctx.resource_list["items"]:
+            if r["kind"] == "ConfigMap" and r["metadata"]["name"] == "cluster-vars":
+              r["data"]["control-plane-host"] = "HOST_IP"

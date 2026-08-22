@@ -1,0 +1,43 @@
+# The RAN-facing NGAP endpoint. The pool below is a placeholder — apply-replacements overwrites its single
+# IP from the injected EdgeSite.spec.n2VIP, so each CP-bearing site exposes on its OWN distinct RAN VIP.
+#
+# How the VIP works on CK8s:
+#  - The pool is SCOPED (serviceSelector) to ONLY the amf-ngap Service, so unrelated LoadBalancers (e.g.
+#    cilium-ingress) can't steal the RAN VIP out from under it.
+#  - The block is a single-IP start==stop RANGE (NOT a /32 CIDR) = this site's VIP. Range blocks have no
+#    first/last-IP exclusion, so the one IP always allocates (a /32 CIDR silently does not).
+#  - Cilium programs the SCTP LoadBalancer frontend in BPF, but its L2 announcer can't run on CK8s
+#    (kubeProxyReplacement is force-reverted), so ARP for the VIP is owned by the sdcore-datapath
+#    node-agent: the `sdcore.nephio.io/expose: n2` label is the intent, and the node-agent's n2-vip step
+#    puts the assigned LB IP on the RAN NIC. Thesis-native: the same actuator that owns the host datapath.
+---
+apiVersion: "cilium.io/v2alpha1"
+kind: CiliumLoadBalancerIPPool
+metadata:
+  name: ran-ngap-pool
+spec:
+  serviceSelector:
+    matchLabels:
+      sdcore.nephio.io/expose: n2
+  blocks:
+    - start: "192.168.4.240"          # <- both overwritten by spec.n2VIP (this site's DISTINCT VIP)
+      stop: "192.168.4.240"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: amf-ngap
+  namespace: default
+  labels:
+    app: amf-ngap
+    sdcore.nephio.io/expose: n2         # <- pool serviceSelector + node-agent both key off this label
+spec:
+  # a real radio dials this Service's EXTERNAL-IP:38412 (SCTP). `kubectl get svc amf-ngap` shows it.
+  type: LoadBalancer
+  selector:
+    app: amf
+  ports:
+    - name: ngap
+      protocol: SCTP
+      port: 38412
+      targetPort: 38412

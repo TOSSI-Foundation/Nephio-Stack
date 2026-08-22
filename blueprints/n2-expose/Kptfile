@@ -1,0 +1,17 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: n2-expose
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: |
+    REAL-RADIO N2 exposure. Where the CP (AMF) runs, this gives the AMF NGAP (SCTP 38412) a stable,
+    RAN-reachable LoadBalancer IP so a physical gNB can attach — no host DNAT, no pod-IP guessing.
+    Pure Nephio: the EdgeSite controller emits it as a PackageVariant (inject=true); apply-replacements
+    stamps the RAN block/NIC from EdgeSite.spec.ranSubnet/ranNic; Config Sync reconciles it onto the
+    cluster; Cilium (the CNI) owns the LoadBalancer + L2 announcement (its LB datapath carries SCTP).
+pipeline:
+  mutators:
+    - image: ghcr.io/kptdev/krm-functions-catalog/apply-replacements:v0.1.1
+      configPath: apply-replacements.yaml

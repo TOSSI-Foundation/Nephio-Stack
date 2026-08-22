@@ -1,0 +1,12 @@
+# Config-injection point: the PackageVariant injects the real EdgeSite's spec here (matched by GVK).
+# apply-replacements then sources spec.ranSubnet / spec.ranNic for the NGAP exposure. Never applied.
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: EdgeSite
+metadata:
+  name: edge
+  annotations:
+    config.kubernetes.io/local-config: "true"
+    kpt.dev/config-injection: "required"
+spec:
+  ranSubnet: "192.168.4.240/28"
+  ranNic: "eth0"

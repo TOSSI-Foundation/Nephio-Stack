@@ -1,0 +1,14 @@
+# Stamp this site's DISTINCT N2 VIP (from the injected EdgeSite intent) into the amf-ngap LB pool's single
+# IP (start==stop). The pool is serviceSelector-scoped to amf-ngap, so each CP-bearing site gets exactly
+# its own VIP with no collision and no /32 first/last-IP quirk.
+apiVersion: fn.kpt.dev/v1alpha1
+kind: ApplyReplacements
+metadata:
+  name: n2-expose-replacements
+  annotations:
+    config.kubernetes.io/local-config: "true"
+replacements:
+  - source: { kind: EdgeSite, fieldPath: spec.n2VIP }
+    targets:
+      - select: { kind: CiliumLoadBalancerIPPool }
+        fieldPaths: [spec.blocks.0.start, spec.blocks.0.stop]

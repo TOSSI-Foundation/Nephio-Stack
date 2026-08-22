@@ -1,0 +1,20 @@
+# Config-injection point: the PackageVariant injects the real EdgeSite's spec here (matched by GVK).
+# apply-replacements then sources per-edge UPF/datapath/slice values from spec.*. Never applied.
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: EdgeSite
+metadata:
+  name: edge
+  annotations:
+    config.kubernetes.io/local-config: "true"
+    kpt.dev/config-injection: "required"
+spec:
+  sliceSD: "0a0b0c"
+  uePool: "172.251.0.0/16"
+  gnbIP: "10.212.0.20"
+  accessCIDR: "10.212.0.10/24"
+  coreCIDR: "10.213.0.10/24"
+  accessGw: "10.212.0.1"
+  coreGw: "10.213.0.1"
+  coreNextHop: "10.213.0.10"
+  egressNic: "eth0"
+  upfName: "upf"

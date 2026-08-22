@@ -1,0 +1,16 @@
+# Edge datapath intent — reconciled by the sdcore-datapath DaemonSet on this edge's node.
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: UPFDataPath
+metadata:
+  name: edge # kpt-set: ${edge-name}
+  namespace: default
+spec:
+  uePool: "172.251.0.0/16"      # kpt-set: ${ue-pool}
+  accessGateway: "10.212.0.1"   # kpt-set: ${access-gw}  (host N3 presence -> gNB ARP + access DstMAC)
+  coreGateway: "10.213.0.1"     # kpt-set: ${core-gw}
+  coreNextHop: "10.213.0.10"    # kpt-set: ${core-nexthop}
+  accessBridge: "sdcore-access" # kpt-set: ${access-bridge}
+  coreBridge: "sdcore-core"     # kpt-set: ${core-bridge}
+  gnbIP: "10.212.0.20"          # kpt-set: ${gnb-ip}
+  egressNic: "eth0"             # kpt-set: ${egress-nic}
+  upfLabel: "app=upf"

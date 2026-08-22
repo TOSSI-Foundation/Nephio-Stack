@@ -1,0 +1,13 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: sdcore-operator
+  annotations:
+    config.kubernetes.io/local-config: "true"
+info:
+  description: |
+    Deploys the SD-Core operator (CRD + RBAC + Deployment) onto a workload cluster.
+    Auto-installed by workload-cluster-ck8s (pv-sdcore-operator), so every provisioned cluster
+    can render SD-Core NFs locally from the specialized NFDeployment it receives.
+    The manifests here are generated from ../../operator/config via `kustomize build`
+    (see Makefile: `make blueprint-operator`). Image ref pinned via versions.env (SDCORE_OPERATOR_IMAGE).
