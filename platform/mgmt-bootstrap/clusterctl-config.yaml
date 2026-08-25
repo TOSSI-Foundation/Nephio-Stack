@@ -1,0 +1,25 @@
+# Declarative Cluster API provider set for the management cluster.
+# Used by: clusterctl init --config clusterctl-config.yaml \
+#            --core cluster-api --bootstrap canonical-kubernetes \
+#            --control-plane canonical-kubernetes --infrastructure byoh
+#
+# Axis 1 (WHERE machines come from): infrastructure = byoh (existing hosts).
+#   For prod bare metal swap to metal3/MAAS; for cloud, capa/capz/capg. Only this line changes.
+# Axis 2 (WHICH distro): bootstrap + control-plane = canonical-kubernetes (Canonical K8s).
+#   Swap to kubeadm for a kubeadm distro — the blueprint is provider-parameterized.
+#
+# PROD: replace the github URLs with your PRIVATE MIRROR (upstream rots).
+providers:
+  - name: "canonical-kubernetes"
+    url: "https://github.com/canonical/cluster-api-k8s/releases/latest/bootstrap-components.yaml"
+    type: "BootstrapProvider"
+  - name: "canonical-kubernetes"
+    url: "https://github.com/canonical/cluster-api-k8s/releases/latest/control-plane-components.yaml"
+    type: "ControlPlaneProvider"
+  - name: "byoh"
+    url: "https://github.com/vmware-tanzu/cluster-api-provider-bringyourownhost/releases/latest/infrastructure-components.yaml"
+    type: "InfrastructureProvider"
+
+# clusterctl behavior
+cert-manager:
+  version: "v1.16.2"

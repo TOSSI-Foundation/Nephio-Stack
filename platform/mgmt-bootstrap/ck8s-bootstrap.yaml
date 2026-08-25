@@ -1,0 +1,10 @@
+# Canonical Kubernetes bootstrap config for the management node.
+# containerd-base-dir: put CK8s's containerd on its own path so it coexists with any
+# pre-existing containerd (e.g. Docker) on a shared host. On a dedicated mgmt box this
+# isn't needed, but it makes the bootstrap host-agnostic.
+cluster-config:
+  network:
+    enabled: true
+  dns:
+    enabled: true
+containerd-base-dir: /var/lib/ck8s-containerd

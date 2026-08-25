@@ -1,0 +1,37 @@
+# In-cluster Gitea = the appliance's git backend (blueprints source + per-cluster deployment repos).
+# Self-contained: SQLite + in-memory session/cache -> ONE persistent pod, no external DB/redis.
+# This is what makes the git layer appliance-model: Porch reads/writes it over cluster-internal
+# DNS, so the product has ZERO dependency on external GitHub.
+replicaCount: 1
+
+# Bundled HA dependencies OFF — we run single-node SQLite + in-memory cache/session.
+postgresql-ha:  { enabled: false }
+postgresql:     { enabled: false }
+valkey-cluster: { enabled: false }
+valkey:         { enabled: false }
+
+persistence:
+  enabled: true
+  size: 5Gi                      # uses the cluster default StorageClass (CK8s local-storage)
+
+service:
+  http:
+    type: NodePort
+    port: 3000
+    nodePort: 32300              # host-side git push + human UI at http://<node-ip>:32300
+
+gitea:
+  admin:                         # overridden from versions.env at install time
+    username: gitea_admin
+    password: changeme
+    email: dev@localhost
+  config:
+    database: { DB_TYPE: sqlite3 }
+    session:  { PROVIDER: memory }
+    cache:    { ADAPTER: memory }
+    queue:    { TYPE: level }
+    server:
+      DOMAIN: gitea-http.gitea.svc.cluster.local
+      ROOT_URL: http://gitea-http.gitea.svc.cluster.local:3000/
+    service:
+      DISABLE_REGISTRATION: true # closed appliance: only the admin, provisioned by us

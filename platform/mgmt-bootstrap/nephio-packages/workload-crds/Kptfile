@@ -1,0 +1,22 @@
+apiVersion: kpt.dev/v1
+kind: Kptfile
+metadata:
+  name: workload-crds
+  annotations:
+    config.kubernetes.io/local-config: "true"
+upstream:
+  type: git
+  git:
+    repo: https://github.com/nephio-project/catalog
+    directory: /nephio/core/workload-crds
+    ref: main
+  updateStrategy: resource-merge
+upstreamLock:
+  type: git
+  git:
+    repo: https://github.com/nephio-project/catalog
+    directory: /nephio/core/workload-crds
+    ref: main
+    commit: c956d71517ee6ffed37ed6efc4ea97f1564f0b69
+info:
+  description: Package for Workload CRDs.
