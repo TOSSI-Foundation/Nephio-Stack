@@ -1,0 +1,29 @@
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: sdcore-approver-reconcile, namespace: kube-system }
+data:
+  reconcile.sh: |
+    #!/bin/bash
+    # Publish rendered PackageRevisions so Config Sync deploys them: Draft->Proposed->Published.
+    # Only acts on DEPLOYMENT repos (not 'blueprints'), so blueprint authoring isn't auto-published.
+    set +e
+    H="nsenter -t 1 -m -u -i -n -p --"
+    K(){ $H /snap/bin/k8s kubectl "$@"; }
+    log(){ echo "[$(date -u +%H:%M:%S)] $*"; }
+    log "sdcore-approver up"
+    while true; do
+      K get packagerevisions -o json 2>/dev/null | jq -c '.items[]
+        | select(.spec.repository != "blueprints")
+        | {name: .metadata.name, repo: .spec.repository, life: .spec.lifecycle}' 2>/dev/null | while read -r r; do
+        name=$(echo "$r" | jq -r .name); life=$(echo "$r" | jq -r .life); repo=$(echo "$r" | jq -r .repo)
+        case "$life" in
+          Draft)
+            K patch packagerevision "$name" --type=merge -p '{"spec":{"lifecycle":"Proposed"}}' >/dev/null 2>&1 \
+              && log "proposed $repo/$name" ;;
+          Proposed)
+            K patch packagerevision "$name" --subresource=approval --type=merge \
+              -p '{"spec":{"lifecycle":"Published"}}' >/dev/null 2>&1 && log "PUBLISHED $repo/$name" ;;
+        esac
+      done
+      sleep 15
+    done

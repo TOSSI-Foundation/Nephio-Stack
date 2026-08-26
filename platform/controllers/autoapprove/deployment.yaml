@@ -1,0 +1,48 @@
+# sdcore-approver — the publish step of the GitOps chain. PackageVariant/PackageVariantSet renders a
+# Draft PackageRevision; this controller proposes + approves it so it becomes Published, at which point
+# Config Sync (RootSync) deploys it. Turns "apply EdgeSite" into a fully hands-free deploy.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata: { name: sdcore-approver, namespace: kube-system }
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata: { name: sdcore-approver }
+rules:
+  - apiGroups: ["porch.kpt.dev"]
+    resources: ["packagerevisions", "packagerevisions/approval", "packagerevisionresources"]
+    verbs: ["get", "list", "watch", "update", "patch"]
+  - apiGroups: ["config.porch.kpt.dev"]
+    resources: ["packagevariants", "packagevariantsets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata: { name: sdcore-approver }
+roleRef: { apiGroup: rbac.authorization.k8s.io, kind: ClusterRole, name: sdcore-approver }
+subjects: [{ kind: ServiceAccount, name: sdcore-approver, namespace: kube-system }]
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: sdcore-approver, namespace: kube-system }
+spec:
+  replicas: 1
+  selector: { matchLabels: { app: sdcore-approver } }
+  template:
+    metadata: { labels: { app: sdcore-approver } }
+    spec:
+      serviceAccountName: sdcore-approver
+      hostPID: true
+      nodeSelector: { node-role.kubernetes.io/control-plane: "" }
+      tolerations: [{ operator: Exists }]
+      containers:
+        - name: approver
+          image: nicolaka/netshoot:latest
+          imagePullPolicy: IfNotPresent
+          securityContext: { privileged: true }
+          command: ["/bin/bash", "/reconcile/reconcile.sh"]
+          volumeMounts: [{ name: reconcile, mountPath: /reconcile }]
+      volumes:
+        - name: reconcile
+          configMap: { name: sdcore-approver-reconcile, defaultMode: 0755 }
