@@ -1,0 +1,20 @@
+# Cilium config for a workload cluster to join the ClusterMesh (the cross-site fabric).
+# cluster.id/name MUST be unique per cluster -> set per-site by the WorkloadCluster injector.
+# Canonical K8s ships Cilium, so this is applied as a HelmChartConfig / values override.
+cluster:
+  name: cluster-name          # per-site (injected)
+  id: 1                       # per-site UNIQUE 1..255 (injected)
+clustermesh:
+  useAPIServer: true
+  apiserver:
+    service:
+      type: LoadBalancer      # reachable from the other clusters / hub
+ipam:
+  mode: cluster-pool
+  operator:
+    # pod CIDRs MUST NOT overlap across clusters (mesh requirement) -> per-site (injected)
+    clusterPoolIPv4PodCIDRList: ["10.1.0.0/16"]
+    clusterPoolIPv4MaskSize: 24
+# enable native routing so N3/N4/N6 macvlan + pod traffic route cleanly across the mesh
+routingMode: tunnel
+tunnelProtocol: vxlan

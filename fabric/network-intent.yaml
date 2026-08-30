@@ -1,0 +1,42 @@
+# Nephio NETWORK INTENT — the address plan the IPAM/VLAN specializer draws from, declared ONCE on the
+# mgmt cluster. The NetworkReconciler (a Nephio domain controller in the sdcore-operator) reconciles each
+# NetworkFabric into the low-level ipam NetworkInstance + vlan VLANIndex the specializer allocates out of —
+# so every NFDeployment interface request (n3/n4/n6) is filled from these pools automatically, per site,
+# non-overlapping. Pure KRM intent -> controller -> backend; no hand-written NetworkInstance/VLANIndex.
+#
+#   vpc-ran      = N3 (gNB<->UPF, GTP-U)
+#   vpc-internal = N4 (SMF<->UPF, PFCP)   <-- the cross-cluster datapath fabric
+#   vpc-internet = N6 (UPF->internet) + UE pools
+---
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: NetworkFabric
+metadata:
+  name: vpc-ran
+  namespace: default
+spec:
+  prefixes:
+    - prefix: "172.2.0.0/16"          # N3 addresses (per-site /24 carved by IPAM)
+      labels: { nephio.org/network-name: n3 }
+---
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: NetworkFabric
+metadata:
+  name: vpc-internal
+  namespace: default
+spec:
+  prefixes:
+    - prefix: "172.1.0.0/16"          # N4 (PFCP) — SMF + every edge UPF land here -> cross-cluster reachable
+      labels: { nephio.org/network-name: n4 }
+---
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: NetworkFabric
+metadata:
+  name: vpc-internet
+  namespace: default
+spec:
+  prefixes:
+    - prefix: "172.0.0.0/16"          # N6 gateway addresses
+      labels: { nephio.org/network-name: n6 }
+    # UE IP pools — 100.64.0.0/10 (carrier-grade-NAT range) so they never overlap a cluster pod/service CIDR.
+    - prefix: "100.64.0.0/10"
+      labels: { nephio.org/network-name: pool }

@@ -1,0 +1,82 @@
+apiVersion: k8s.cni.cncf.io/v1
+kind: NetworkAttachmentDefinition
+metadata: { name: gnb-access-edgea, namespace: default }
+spec:
+  config: '{"cniVersion":"0.3.1","type":"bridge","bridge":"sdcore-access","isGateway":false,"ipam":{"type":"static","addresses":[{"address":"10.200.193.20/24"}]}}'
+---
+apiVersion: v1
+kind: ConfigMap
+metadata: { name: ueransim-edgea, namespace: default }
+data:
+  run.sh: |
+    #!/bin/bash
+    set -x
+    NGAP=$(ip -4 -o addr show eth0 | awk '{print $4}' | cut -d/ -f1)
+    GTP=$(ip -4 -o addr show net1 | awk '{print $4}' | cut -d/ -f1)
+    AMF=$(getent ahostsv4 amf.default.svc.cluster.local | head -1 | awk '{print $1}')
+    cat > /tmp/gnb.yaml <<G
+    mcc: '001'
+    mnc: '01'
+    nci: '0x000000010'
+    idLength: 32
+    tac: 1
+    linkIp: $NGAP
+    ngapIp: $NGAP
+    gtpIp: $GTP
+    amfConfigs:
+      - { address: $AMF, port: 38412 }
+    slices:
+      - { sst: 1, sd: 0x010203 }
+    ignoreStreamIds: true
+    G
+    cat > /tmp/ue.yaml <<U
+    supi: 'imsi-001010000007487'
+    mcc: '001'
+    mnc: '01'
+    protectionScheme: 0
+    homeNetworkPublicKey: ''
+    homeNetworkPublicKeyId: 0
+    routingIndicator: '0000'
+    key: '5122250214c33e723a5dd523fc145fc0'
+    op: '981d464c7c52eb6e5036234984ad0bcf'
+    opType: 'OPC'
+    amf: '8000'
+    imei: '356938035643803'
+    imeiSv: '4370816125816151'
+    uacAic: { mps: false, mcs: false }
+    uacAcc: { normalClass: 0, class11: false, class12: false, class13: false, class14: false, class15: false }
+    gnbSearchList:
+      - $NGAP
+    sessions:
+      - { type: 'IPv4', apn: 'internet', slice: { sst: 1, sd: 0x010203 } }
+    configured-nssai:
+      - { sst: 1, sd: 0x010203 }
+    default-nssai:
+      - { sst: 1, sd: 0x010203 }
+    integrity: { IA1: true, IA2: true, IA3: true }
+    ciphering: { EA1: true, EA2: true, EA3: true }
+    integrityMaxRate: { uplink: 'full', downlink: 'full' }
+    U
+    nr-gnb -c /tmp/gnb.yaml &
+    sleep 25
+    nr-ue -c /tmp/ue.yaml
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata: { name: ueransim-edgea, namespace: default }
+spec:
+  replicas: 1
+  strategy: { type: Recreate }
+  selector: { matchLabels: { app: ueransim-edgea } }
+  template:
+    metadata:
+      labels: { app: ueransim-edgea }
+      annotations: { k8s.v1.cni.cncf.io/networks: gnb-access-edgea }
+    spec:
+      containers:
+        - name: ueransim
+          image: openverso/ueransim:3.2.6
+          command: ["/bin/bash", "/cfg/run.sh"]
+          securityContext: { privileged: true, capabilities: { add: ["NET_ADMIN"] } }
+          volumeMounts: [ { name: cfg, mountPath: /cfg } ]
+      volumes: [ { name: cfg, configMap: { name: ueransim-edgea } } ]
