@@ -1,0 +1,12 @@
+# The Nephio IPAM pool the EdgeSite controller's IPClaims allocate from (non-overlapping per-site
+# pod/access/core CIDRs + UE pools). Applied once at bootstrap. This is the KRM-native replacement for
+# the old bash 10.$I addressing.
+apiVersion: ipam.resource.nephio.org/v1alpha1
+kind: NetworkInstance
+metadata:
+  name: sdcore-vpc
+  namespace: default
+spec:
+  prefixes:
+    - prefix: "10.0.0.0/8"
+    - prefix: "172.16.0.0/12"

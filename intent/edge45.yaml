@@ -1,0 +1,13 @@
+# Edge UPF on the separate server 192.168.4.45 — pure-Nephio intent. The EdgeSite controller emits:
+#   cluster-edge45 PackageVariant (CAPI provisions Canonical K8s on 4.45 via the BYOH host) + IPClaims,
+#   upf-/multus-/datapath- PackageVariants (BESS-UPF + CNI + datapath onto cluster-edge45 via Config Sync),
+#   and a MeshLink (edge45 -> mgmt) that wires N2 (amf-cp) + N4 (upf-edge45) over Cilium ClusterMesh to
+#   the mgmtcore control plane on the mgmt cluster. controlPlane omitted => defaults to "mgmt".
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: EdgeSite
+metadata:
+  name: edge45
+  namespace: default
+spec:
+  server: 192.168.4.45
+  role: upf-only

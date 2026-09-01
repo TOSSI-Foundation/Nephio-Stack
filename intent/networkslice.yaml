@@ -1,0 +1,18 @@
+# NetworkSlice intent — the NetworkSliceReconciler provisions this into the SD-Core webconsole as a
+# device-group (its subscribers' IMSIs + UE IP pool) + a network-slice whose site-info (PLMN + gNB + TAC
+# + UPF) makes the AMF advertise the served TAI, so a gNB's NG Setup succeeds. PLMN 00101.
+# edge1: matches e2e/ueransim-edgea.yaml (UE sst 1 / sd 0x010203, gNB tac 1) + the mgmtcore UPF uePool.
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: NetworkSlice
+metadata:
+  name: edge1
+  namespace: default
+spec:
+  sst: "1"
+  sd: "010203"
+  dnn: internet
+  uePool: "172.193.0.0/16"
+  upfName: upf
+  plmn: { mcc: "001", mnc: "01" }
+  gnbs:
+    - { name: gnb1, tac: 1 }

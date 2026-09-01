@@ -1,0 +1,28 @@
+# THE WHOLE FLEET, as ONE intent. Each entry is just {server, role} — plus an optional {ran} to also stand
+# up an OCUDU gNB on that site. The Fleet controller expands each into an EdgeSite, which expands into a
+# cluster + CP/UPF (+ gNB) packages. Nephio does all the rest.
+#
+#   ADD a server      -> add an entry here          -> make sites
+#   CHANGE a role      -> edit its role              -> make sites
+#   DELETE a server    -> remove its entry           -> make sites   (its EdgeSite is GC'd -> site torn down)
+#
+#   role: cp+upf   = a self-contained 5G core on that server
+#   role: upf-only = an edge UPF steered by the mgmt control plane
+#
+#   ran: (cp+upf sites only) also deploy an OCUDU standalone gNB, auto-wired to that site's local core
+#     split:  "8"   = SDR driven directly (device below)   |  "7.2" = Open Fronthaul to an external O-RU
+#     device: zmq   = RF simulator, NO hardware (VM-provable)  |  b210 / x310 = a USRP SDR
+#     cell:   { band, dlArfcn, bandwidthMHz, commonScs, pci } — hand-tweak the radio (optional)
+#     ofh:    { interface, ruMac, duMac, vlanTag } — split 7.2 fronthaul params (optional)
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: Fleet
+metadata:
+  name: fleet
+  namespace: default
+spec:
+  sites:
+    # Every edge = a self-contained cp+upf core + an OCUDU gNB (split 8, ZMQ RF-sim), auto-wired to its core.
+    - server: 192.168.1.111
+      user: one
+      role: cp+upf
+      ran: {device: b210}

@@ -1,0 +1,22 @@
+# Colocated management-site 5G core — pure-Nephio intent. role cp+upf + colocated:true tells the EdgeSite
+# controller to deploy the SD-Core control plane AND a BESS-UPF (+ multus + datapath actuator) onto the
+# EXISTING mgmt cluster (no separate CAPI cluster, N4 local, no MeshLink). One apply -> the controller
+# emits cp-/upf-/multus-/datapath- PackageVariants to the mgmt deploy repo; Porch renders them, the
+# auto-approver publishes, Config Sync reconciles them onto the mgmt cluster. Addressing is auto-derived.
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: EdgeSite
+metadata:
+  name: mgmtcore
+  namespace: default
+spec:
+  server: 192.168.1.113
+  role: cp+upf
+  colocated: true
+  # Also deploy an OCUDU gNB on the mgmt core, auto-connected to this colocated core. Real N310 SDR (split 8):
+  # a NETWORKED USRP, so give it the host NIC on the radio's data L2 (radioNic) + the N310's own addr
+  # (radioAddr). The operator builds a jumbo (MTU 9000) radio0 macvlan on that NIC so the gNB reaches the SDR.
+  ran:
+    split: "8"
+    device: n310
+    radioNic: enp175s0f1
+    radioAddr: 192.168.20.2

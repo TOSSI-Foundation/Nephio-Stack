@@ -1,0 +1,47 @@
+# Subscriber intent (SIMs). PLMN 00101. The sdcore-provisioner reconciles these into WebUI/UDR
+# and clones provisioned data for the referenced slice. Ki/OPc are per-subscriber.
+---
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: Subscriber
+metadata: { name: sub-7487, namespace: default }
+spec:
+  imsi: "001010000007487"
+  key: "5122250214c33e723a5dd523fc145fc0"
+  opc: "981d464c7c52eb6e5036234984ad0bcf"
+  sliceRef: edge1
+---
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: Subscriber
+metadata: { name: sub-7488, namespace: default }
+spec:
+  imsi: "001010000007488"
+  key: "5122250214c33e723a5dd523fc145fc0"
+  opc: "981d464c7c52eb6e5036234984ad0bcf"
+  sliceRef: edge45
+---
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: Subscriber
+metadata: { name: sub-7489, namespace: default }
+spec:
+  imsi: "001010000007489"
+  key: "5122250214c33e723a5dd523fc145fc0"
+  opc: "981d464c7c52eb6e5036234984ad0bcf"
+  sliceRef: edge62
+---
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: Subscriber
+metadata: { name: sub-000001, namespace: default }
+spec:
+  imsi: "001010000000001"
+  key: "fec86ba6eb707ed08905757b1bb44b8f"
+  opc: "C42449363BBAD02B66D16BC975D77CC1"
+  sliceRef: edge1
+---
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: Subscriber
+metadata: { name: sub-000002, namespace: default }
+spec:
+  imsi: "001010000000002"
+  key: "fec86ba6eb707ed08905757b1bb44b8f"
+  opc: "C42449363BBAD02B66D16BC975D77CC1"
+  sliceRef: edge63

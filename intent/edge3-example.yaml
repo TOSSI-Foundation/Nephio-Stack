@@ -1,0 +1,21 @@
+# Adding an edge is this one object. The PackageVariantSets inject this EdgeSite into the cluster +
+# edge-site variants; the blueprints' apply-replacements read spec.* — no annotations, no manual steps.
+apiVersion: sdcore.nephio.io/v1alpha1
+kind: EdgeSite
+metadata:
+  name: edge3
+  namespace: default
+spec:
+  server: "192.168.4.60"        # BYOH-registered edge host
+  role: upf-only
+  podCIDR: "10.3.0.0/16"         # non-overlapping per edge
+  sliceSD: "0c0d0e"
+  uePool: "172.253.0.0/16"
+  gnbIP: "10.222.0.20"
+  accessCIDR: "10.222.0.10/24"
+  coreCIDR: "10.223.0.10/24"
+  accessGw: "10.222.0.1"
+  coreGw: "10.223.0.1"
+  coreNextHop: "10.223.0.10"
+  egressNic: "eth0"
+  upfName: "upf"
