@@ -9,6 +9,14 @@ A management cluster runs Nephio and a purpose-built operator. You declare an `E
 
 ---
 
+## Stack and releases
+
+`sdcore-ocudu` is **one stack** — a specific, validated pairing of a 5G core (**SD-Core**) and a RAN (**OCUDU-RAN**), shipped as **versioned releases**. Each release pins a tested set of core, RAN, UPF and platform component versions (see [`versions.env`](versions.env)), so a deployment made from a given release is reproducible end to end.
+
+The core and the RAN are delivered as **Nephio blueprints** and specialised per site — never forked — which makes them **pluggable**. The operator, IPAM, cluster provisioning and datapath machinery are combination-agnostic: they do not care *which* core or *which* RAN sits behind the intent. As a result, additional **5G-core + RAN combinations** ship as their own release lines alongside `sdcore-ocudu`, each a tested pairing exposed through the same one-object `EdgeSite` / `Fleet` API. `sdcore-ocudu` is the first of these lines.
+
+---
+
 ## Architecture
 
 <!-- ┌─────────────────────────────────────────────────────────────┐ -->
@@ -254,6 +262,8 @@ kubectl logs -f deploy/ueransim-edgeb        # NG Setup → Registration → PDU
 ```
 
 Real UE / real radio: point the gNB at a phone and verify with a ping from the UE.
+
+**Scale / multi-UE testing (50+ UEs).** For load and scale validation — 50 simultaneous UEs attaching, establishing PDU sessions and passing traffic against an OCUDU-RAN gNB in RF-simulation mode — see the TOSSI RF-sim testbed guide: [RF-sim testbed (RAN integration)](https://tossi.org/docs/ran-integration/rfsim-testbed/).
 
 ---
 
