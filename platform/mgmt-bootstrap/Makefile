@@ -147,3 +147,7 @@ gitea:
 
 clean:
 	sudo snap remove k8s --purge 2>/dev/null || true
+	@for br in sdcore-access sdcore-core; do sudo ip link delete $$br 2>/dev/null || true; done
+	sudo rm -rf /var/lib/ck8s-containerd /etc/kubernetes /capi /run/containerd 2>/dev/null || true
+	sudo find /etc/cni/net.d -maxdepth 1 -type f -delete 2>/dev/null || true
+	@echo ">> mgmt host wiped (pristine)."

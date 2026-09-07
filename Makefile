@@ -42,7 +42,7 @@ up: mgmt publish mgmt-core sites
 
 ## Tear the WHOLE fabric down: wipe the edge VMs back to bare (while CAPI is still alive to deprovision
 ## them), THEN nuke the mgmt platform (CK8s + colocated core) on 192.168.4.54.
-down: sites-delete clean
+down: sites-delete hosts-wipe clean
 
 ## The per-site flow is now PURE KRM — no `make cp`/`make edge` orchestration. After bootstrap you just:
 ##    kubectl apply -f <your-edgesites.yaml>
@@ -254,6 +254,28 @@ sites:
 ## Porch removes the packages -> Config Sync prunes -> CAPI deprovisions EVERY cluster IN PARALLEL. No SSH,
 ## no per-host script — scales to any N. A released host is made pristine at its NEXT `make add-server`
 ## (register-host.sh resets any stale CK8s), so 'release' (declarative) and 'wipe' (at re-onboard) are decoupled.
+EDGE_HOSTS = $(shell awk '/^[[:space:]]*-[[:space:]]*server:/{if(s)print (u?u:"ubuntu")"@"s; s=$$0; sub(/.*server:[[:space:]]*/,"",s); u=""} /^[[:space:]]*user:/{u=$$0; sub(/.*user:[[:space:]]*/,"",u)} END{if(s)print (u?u:"ubuntu")"@"s}' $(FLEET) 2>/dev/null)
+
+# hosts-wipe: after CAPI has released the edge clusters, wipe each edge HOST back to pristine.
+# Host wipe is inherently imperative (a released bare host has no KRM owner) — the cluster teardown
+# above is declarative; this is the one ssh-per-host step, and it is idempotent + best-effort.
+hosts-wipe:
+	@echo ">> wiping edge hosts to pristine…"
+	@for h in $(EDGE_HOSTS); do echo "   $$h"; \
+	  printf '%s\n' \
+	    'systemctl disable --now byoh-agent 2>/dev/null || true' \
+	    'rm -f /usr/local/bin/byoh-hostagent; rm -rf /root/.byoh' \
+	    'snap remove k8s --purge 2>/dev/null || true' \
+	    'for i in sdcore-access sdcore-core flannel.1 cni0 vxlan.calico; do ip link delete $$i 2>/dev/null || true; done' \
+	    'rm -rf /var/lib/ck8s-containerd /etc/kubernetes /capi /run/containerd 2>/dev/null || true' \
+	    'find /etc/cni/net.d -maxdepth 1 -type f -delete 2>/dev/null || true' \
+	    'iptables -t nat -F POSTROUTING 2>/dev/null || true; iptables-legacy -t nat -F POSTROUTING 2>/dev/null || true' \
+	    'systemctl restart docker 2>/dev/null || true' \
+	  | ssh -o StrictHostKeyChecking=accept-new -o ConnectTimeout=20 $$h 'sudo bash -s' 2>/dev/null \
+	    || echo "   (unreachable $$h — it self-wipes at next make add-server)"; \
+	done
+	@echo ">> edge hosts wiped."
+
 sites-delete:
 	kubectl delete -f $(FLEET) --ignore-not-found
 	@echo ">> waiting for CAPI to deprovision all edge clusters (parallel)…"
