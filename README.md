@@ -24,8 +24,9 @@ The core and the RAN are delivered as **Nephio blueprints** and specialised per 
 <!-- │  Suggested path: docs/architecture.svg                       │ -->
 <!-- └─────────────────────────────────────────────────────────────┘ -->
 
-![Architecture](<img width="1920" height="1080" alt="43" src="https://github.com/user-attachments/assets/1089da3a-9d25-4f5c-b904-ac20c473f9ab" />
-)
+<img width="1920" height="1080" alt="43" src="https://github.com/user-attachments/assets/1089da3a-9d25-4f5c-b904-ac20c473f9ab" />
+
+
 
 The platform has two tiers:
 
