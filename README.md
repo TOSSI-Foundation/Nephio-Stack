@@ -269,11 +269,34 @@ Real UE / real radio: point the gNB at a phone and verify with a ping from the U
 
 ## Teardown
 
-Retracting intent is all it takes. Deleting an `EdgeSite`/`Fleet` garbage-collects its PackageVariants / MeshLink / NetworkSlice / IPClaims → Porch removes the packages → Config Sync prunes → **Cluster API deprovisions the cluster(s)**. No SSH, no per-host teardown script.
+**Retract intent (declarative).** Deleting an `EdgeSite`/`Fleet` garbage-collects its PackageVariants / MeshLink / NetworkSlice / IPClaims → Porch removes the packages → Config Sync prunes → **Cluster API deprovisions the cluster(s)**.
 
 ```bash
 kubectl delete edgesite <name>     # one site  (make edge-delete NAME=<name> also waits for CAPI)
 kubectl delete -f fleet.yaml       # whole fleet (make sites-delete also waits for CAPI)
+```
+
+**Delete everything (`make down`).** Full teardown that leaves every host **pristine** — it runs `sites-delete` → `hosts-wipe` → `clean`:
+
+1. `sites-delete` — delete the Fleet → CAPI deprovisions the edge clusters.
+2. `hosts-wipe` — SSH each edge host (read from `fleet.yaml`) and remove the byoh-agent, CK8s snap, `sdcore-access`/`sdcore-core` bridges, `/capi`, `/etc/kubernetes`, containerd data and leftover datapath NAT rules.
+3. `clean` — wipe the **mgmt** host the same way and remove its k8s snap.
+
+```bash
+make down
+```
+
+**Alternative — wipe a host manually.** To force a single box pristine outside `make down` (a host that was never in `fleet.yaml`, or a stuck one), run **on that host**:
+
+```bash
+sudo systemctl disable --now byoh-agent 2>/dev/null || true
+sudo rm -f /usr/local/bin/byoh-hostagent && sudo rm -rf /root/.byoh
+sudo snap remove k8s --purge 2>/dev/null || true
+for br in sdcore-access sdcore-core; do sudo ip link delete $br 2>/dev/null || true; done
+sudo rm -rf /var/lib/ck8s-containerd /etc/kubernetes /capi /run/containerd
+sudo find /etc/cni/net.d -maxdepth 1 -type f -delete 2>/dev/null || true
+sudo iptables -t nat -F POSTROUTING; sudo iptables-legacy -t nat -F POSTROUTING 2>/dev/null || true
+sudo systemctl restart docker 2>/dev/null || true
 ```
 
 ---
