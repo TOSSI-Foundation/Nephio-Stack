@@ -73,6 +73,10 @@ spec:
                             Cell: NR cell radio parameters you tweak by hand (defaults suit band n78, 100 MHz, 30 kHz SCS).
                             Used only when `config` is empty (the generated/zmq path).
                           properties:
+                            antennas:
+                              description: 'Antennas: nof_antennas_dl/ul. Default
+                                1 (SDR); set 4 for a 4T4R O-RU (7.2 LiteOn-class).'
+                              type: integer
                             band:
                               default: n78
                               type: string
@@ -115,6 +119,13 @@ spec:
                           - b210
                           - x310
                           type: string
+                        enabled:
+                          default: true
+                          description: |-
+                            Enabled: whether the gNB runs. Set false to STOP the gNB (spare a real O-RU/SDR when idle)
+                            WITHOUT deleting the intent — the operator scales the gNB Deployment to 0 (Config Sync keeps
+                            it at 0, so it stays down). Set true to bring it back. Defaults to true.
+                          type: boolean
                         ldLibraryPath:
                           description: |-
                             LdLibraryPath: for a real-radio (UHD) gNB, the LD_LIBRARY_PATH the host binary needs (UHD/DPDK/MKL).
@@ -125,18 +136,38 @@ spec:
                             Ofh: Open Fronthaul (split 7.2) parameters. Only used when split=="7.2" — points the DU at an
                             external O-RU over a raw-socket/DPDK fronthaul NIC. Requires real hardware + PTP (Phase 3).
                           properties:
+                            dlPortId:
+                              items:
+                                type: integer
+                              type: array
                             duMac:
                               description: 'DuMac: the DU/host fronthaul NIC MAC address
                                 (fronthaul source).'
+                              type: string
+                            ealArgs:
+                              description: |-
+                                EalArgs: DPDK EAL arguments for the fronthaul port (lcores + the "-a <pciAddr>" device). Host-CPU
+                                specific. When empty, the operator builds "--lcores (0-1)@(0-3) -a <interface> --iova-mode=pa".
                               type: string
                             interface:
                               description: 'Interface: the fronthaul NIC name (raw-socket
                                 mode) or PCIe address like "0000:01:00.1" (DPDK mode).'
                               type: string
+                            prachPortId:
+                              description: |-
+                                PrachPortId / DlPortId / UlPortId: the O-RU eAxC port maps. Defaults suit a 4T4R O-RU
+                                (prach [4,5,6,7], dl/ul [0,1,2,3]). Change per RU.
+                              items:
+                                type: integer
+                              type: array
                             ruMac:
                               description: 'RuMac: the O-RU''s MAC address (fronthaul
                                 destination).'
                               type: string
+                            ulPortId:
+                              items:
+                                type: integer
+                              type: array
                             vlanTag:
                               default: 3
                               description: 'VlanTag: the C-plane/U-plane VLAN tag

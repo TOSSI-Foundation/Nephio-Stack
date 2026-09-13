@@ -105,6 +105,12 @@ type RANSpec struct {
 	// +kubebuilder:default=ocudu
 	// +optional
 	Stack string `json:"stack,omitempty"`
+	// Enabled: whether the gNB runs. Set false to STOP the gNB (spare a real O-RU/SDR when idle)
+	// WITHOUT deleting the intent — the operator scales the gNB Deployment to 0 (Config Sync keeps
+	// it at 0, so it stays down). Set true to bring it back. Defaults to true.
+	// +kubebuilder:default=true
+	// +optional
+	Enabled *bool `json:"enabled,omitempty"`
 	// Split: the O-RAN functional split. "8" = the SDR is driven directly (device below); "7.2" = Open
 	// Fronthaul to an external O-RU.
 	// +kubebuilder:validation:Enum="8";"7.2"
@@ -169,6 +175,18 @@ type RANOfh struct {
 	// +kubebuilder:default=3
 	// +optional
 	VlanTag int `json:"vlanTag,omitempty"`
+	// EalArgs: DPDK EAL arguments for the fronthaul port (lcores + the "-a <pciAddr>" device). Host-CPU
+	// specific. When empty, the operator builds "--lcores (0-1)@(0-3) -a <interface> --iova-mode=pa".
+	// +optional
+	EalArgs string `json:"ealArgs,omitempty"`
+	// PrachPortId / DlPortId / UlPortId: the O-RU eAxC port maps. Defaults suit a 4T4R O-RU
+	// (prach [4,5,6,7], dl/ul [0,1,2,3]). Change per RU.
+	// +optional
+	PrachPortId []int `json:"prachPortId,omitempty"`
+	// +optional
+	DlPortId []int `json:"dlPortId,omitempty"`
+	// +optional
+	UlPortId []int `json:"ulPortId,omitempty"`
 }
 
 // RANCell holds the hand-tweakable NR cell radio parameters (these are the "change some things manually"
@@ -189,6 +207,9 @@ type RANCell struct {
 	// +kubebuilder:default=1
 	// +optional
 	Pci int `json:"pci,omitempty"`
+	// Antennas: nof_antennas_dl/ul. Default 1 (SDR); set 4 for a 4T4R O-RU (7.2 LiteOn-class).
+	// +optional
+	Antennas int `json:"antennas,omitempty"`
 }
 
 // EdgeSiteStatus is the observed state.

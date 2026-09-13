@@ -495,6 +495,10 @@ func (r *EdgeSiteReconciler) deliverRAN(ctx context.Context, es *sdcorev1alpha1.
 	if ran == nil {
 		return nil
 	}
+	ranReplicas := 1
+	if ran.Enabled != nil && !*ran.Enabled {
+		ranReplicas = 0 // ran.enabled:false -> stop the gNB (spare the O-RU) without deleting intent
+	}
 	tac := 1 // uniform TAC across the whole fleet (one tracking area)
 	sd, _ := strconv.ParseInt(strings.TrimPrefix(orDefault(es.Spec.SliceSD, "102030"), "0x"), 16, 64)
 	split := orDefault(ran.Split, "8")
@@ -503,6 +507,7 @@ func (r *EdgeSiteReconciler) deliverRAN(ctx context.Context, es *sdcorev1alpha1.
 	// A real SDR (UHD) or O-RU drives actual RF and is bound to the node the radio is attached to — the gNB
 	// runs hostNetwork + privileged and mounts the host's UHD/DPDK/MKL libs. ZMQ is an in-cluster simulator.
 	isUHD := split == "8" && device != "zmq"
+	isOFH := split == "7.2"
 
 	// Config precedence, so a client only writes `device:` for the common case:
 	//   1. ran.config      — full user override (advanced).
@@ -514,6 +519,8 @@ func (r *EdgeSiteReconciler) deliverRAN(ctx context.Context, es *sdcorev1alpha1.
 		gnb = s
 	} else if isUHD {
 		gnb = deviceProfile(device, tac, sd)
+	} else if isOFH {
+		gnb = ofhProfile(ran.Ofh, ran.Cell, tac, sd)
 	} else {
 		pci := orInt(ran.Cell.Pci, 1)
 		band := strings.TrimPrefix(orDefault(ran.Cell.Band, "n78"), "n")
@@ -557,6 +564,13 @@ log:
 `, tac, sd, radio, arfcn, band, bw, scs, tac, pci, prach)
 	}
 
+	// N3/NG-U downlink bind - universal across ALL gNB modes (OFH, UHD/SDR, ZMQ): pin the NG-U (N3
+	// GTP-U) socket to the gNB real n3 IP (GnbIP). Without it OCUDU binds/advertises 0.0.0.0, the UPF
+	// encaps downlink to 0.0.0.0, and the UE gets 5G + IP but NO internet (downlink black-holed at
+	// accessbad_route). Skip if the config already declares cu_up.
+	if es.Spec.GnbIP != "" && !strings.Contains(gnb, "cu_up:") {
+		gnb += fmt.Sprintf("\ncu_up:\n  ngu:\n    socket:\n      - bind_addr: %s\n", es.Spec.GnbIP)
+	}
 	cm := fmt.Sprintf(`apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -576,12 +590,68 @@ data:
 	initC := `      initContainers:
         - name: resolve-amf
           image: busybox:1.36
-          command: ["sh","-c","until AMF=$(nslookup amf.default.svc.cluster.local 2>/dev/null | awk '/^Address: /{print $2; exit}'); [ -n \"$AMF\" ]; do echo waiting for amf DNS; sleep 2; done; sed \"s/AMF_ADDR/$AMF/\" /in/gnb.yaml > /out/gnb.yaml; echo resolved AMF=$AMF"]
+          command: ["sh","-c","until AMF=$(nslookup amf-headless.default.svc.cluster.local 2>/dev/null | awk '/^Address: /{print $2; exit}'); [ -n \"$AMF\" ]; do echo waiting for amf DNS; sleep 2; done; sed \"s/AMF_ADDR/$AMF/\" /in/gnb.yaml > /out/gnb.yaml; echo resolved AMF=$AMF"]
           volumeMounts:
             - { name: cfg-in, mountPath: /in }
             - { name: cfg-out, mountPath: /out }`
 	var podSpec string
-	if isUHD {
+	if isOFH {
+		// Split 7.2 Open Fronthaul: a DPDK O-RU gNB (integrated CU+DU). Non-hostNetwork (N2 via the pod's
+		// primary CNI IP; N3 via the access-net multus iface). The fronthaul VF is driven by DPDK over vfio
+		// (hostPath /dev/vfio + 1G hugepages). HOST PREREQS the operator does NOT manage: the fronthaul VF
+		// bound to vfio-pci, hugepages reserved, and PTP (phc2sys) running — hardware/host concerns.
+		ofhInit := `set -e
+until AMF=$(getent hosts amf-headless.default.svc.cluster.local 2>/dev/null | awk '{print $1; exit}'); [ -n "$AMF" ]; do echo waiting for amf DNS; sleep 2; done
+CPUS=$(tr ' ' '\n' < /proc/cmdline | grep '^isolcpus=' | sed 's/.*isolcpus=//' | tr ',' '\n' | grep -E '^[0-9]+(-[0-9]+)?$' | head -1)
+[ -n "$CPUS" ] || CPUS="0-$(($(nproc)-1))"
+A=$(ip -o -4 addr show n3 2>/dev/null | awk '{print $4}' | head -1); [ -n "$A" ] && ip addr change "$A" dev n3 scope link 2>/dev/null || true
+sed "s/AMF_ADDR/$AMF/" /in/gnb.yaml > /out/gnb.yaml
+# N3/NG-U: pin the gNB downlink GTP-U bind to its real n3 IP, else it advertises 0.0.0.0 and the UPF
+# encaps downlink to 0.0.0.0 (uplink works, downlink dropped). $A is the n3 addr (with /prefix).
+N3=$(echo "$A" | cut -d/ -f1)
+if [ -n "$N3" ] && ! grep -q '^cu_up:' /out/gnb.yaml; then printf '\ncu_up:\n  ngu:\n    socket:\n      - bind_addr: %s\n' "$N3" >> /out/gnb.yaml; fi
+printf '%s' "$CPUS" > /out/cpuset
+echo "ofh-init: cpuset=[$CPUS] amf=$AMF"
+`
+		detectCM := fmt.Sprintf("apiVersion: v1\nkind: ConfigMap\nmetadata:\n  name: ocudu-gnb-detect\n  namespace: default\ndata:\n  detect.sh: |\n%s", indent(ofhInit, "    "))
+		if err := gitPut(ctx, r.Client, deployRepo, "ran/detect.yaml", detectCM); err != nil {
+			return err
+		}
+		podSpec = `      dnsPolicy: ClusterFirst
+      initContainers:
+        - name: ofh-init
+          image: ocudu/gnb:split72
+          imagePullPolicy: IfNotPresent
+          command: ["sh","/scripts/detect.sh"]
+          securityContext: { privileged: true }
+          volumeMounts:
+            - { name: cfg-in, mountPath: /in }
+            - { name: scripts, mountPath: /scripts }
+            - { name: cfg-out, mountPath: /out }
+      containers:
+        - name: gnb
+          image: ocudu/gnb:split72
+          imagePullPolicy: IfNotPresent
+          command: ["sh","-c","exec taskset -c \"$(cat /out/cpuset)\" /usr/local/bin/gnb_split_7_2 -c /out/gnb.yaml"]
+          securityContext: { privileged: true }
+          resources:
+            limits: { hugepages-1Gi: 2Gi, memory: 6Gi }
+            requests: { hugepages-1Gi: 2Gi, memory: 2Gi, cpu: "4" }
+          volumeMounts:
+            - { name: cfg-out, mountPath: /out }
+            - { name: vfio, mountPath: /dev/vfio }
+            - { name: hugepages, mountPath: /dev/hugepages }
+            - { name: sysbus, mountPath: /sys/bus/pci }
+            - { name: sysdev, mountPath: /sys/devices }
+      volumes:
+        - { name: cfg-in, configMap: { name: ocudu-gnb-config } }
+        - { name: scripts, configMap: { name: ocudu-gnb-detect } }
+        - { name: cfg-out, emptyDir: {} }
+        - { name: vfio, hostPath: { path: /dev/vfio } }
+        - { name: hugepages, emptyDir: { medium: HugePages } }
+        - { name: sysbus, hostPath: { path: /sys/bus/pci } }
+        - { name: sysdev, hostPath: { path: /sys/devices } }`
+	} else if isUHD {
 		// SELF-CONTAINED image (UHD + libs + FPGA images baked, built from source) — NO host mounts, so it
 		// runs on ANY host/OS. A `detect` initContainer auto-discovers the radio (uhd_find_devices), the
 		// isolated cores (isolcpus), resolves the AMF, and (for a networked N310) sets the data-NIC MTU —
@@ -601,7 +671,7 @@ data:
 		// and connects. (A stale long-lived gNB pod can drift into an N2 re-connect loop — a clean pod restart,
 		// which the operator does on config change, clears it; there is no per-host single-homing to do here.)
 		detectScript := fmt.Sprintf(`set -e
-until AMF=$(getent hosts amf.default.svc.cluster.local 2>/dev/null | awk '{print $1; exit}'); [ -n "$AMF" ]; do echo "waiting for amf DNS"; sleep 2; done
+until AMF=$(getent hosts amf-headless.default.svc.cluster.local 2>/dev/null | awk '{print $1; exit}'); [ -n "$AMF" ]; do echo "waiting for amf DNS"; sleep 2; done
 WANT=%q
 # Honor the intent-declared radio: bind ONLY the requested type, never auto-grab a different/shared one.
 # USB b200 needs no addr; networked n3xx/x300 discover THEIR OWN addr (filtered by type so a co-visible
@@ -614,7 +684,7 @@ case "$WANT" in
         DATA=${RADIO_ADDR:-$MGMT}; ARGS="type=x300${DATA:+,addr=$DATA}" ;;
   *)    TYPE="$WANT"; [ -n "$RADIO_ADDR" ] && ARGS="addr=$RADIO_ADDR" || ARGS="type=$WANT" ;;
 esac
-CPUS=$(tr ' ' '\n' < /proc/cmdline | grep '^isolcpus=' | sed 's/isolcpus=//' | tr ',' '\n' | grep -E '^[0-9]+(-[0-9]+)?$' | paste -sd,)
+CPUS=$(tr ' ' '\n' < /proc/cmdline | grep '^isolcpus=' | sed 's/isolcpus=//' | tr ',' '\n' | grep -E '^[0-9]+(-[0-9]+)?$' | head -1)
 [ -n "$CPUS" ] || CPUS="0-$(($(nproc)-1))"
 # N3 (access-net multus iface "n3") only needs L2 reachability to the UPF; set it link-scope so OCUDU's
 # 0.0.0.0-bound N2 SCTP does NOT advertise it — leaving the pod's primary CNI IP as the ONLY N2 address
@@ -735,14 +805,14 @@ metadata:
   namespace: default
   labels: { app: gnb-%s }
 spec:
-  replicas: 1
+  replicas: %d
   selector: { matchLabels: { app: gnb-%s } }%s
   template:
     metadata:
       labels: { app: gnb-%s }%s
     spec:
 %s
-`, es.Name, es.Name, es.Name, strategy, es.Name, podAnnot, podSpec)
+`, es.Name, es.Name, ranReplicas, es.Name, strategy, es.Name, podAnnot, podSpec)
 	return gitPut(ctx, r.Client, deployRepo, "ran/deployment.yaml", dep)
 }
 
@@ -847,6 +917,159 @@ func srateForBw(bwMHz int) string {
 	default:
 		return "122.88"
 	}
+}
+
+// ofhProfile renders a complete, proven OCUDU gnb.yaml for a split-7.2 O-RU (integrated CU+DU) — the DPDK
+// Open Fronthaul path (LiteOn-class 4T4R O-RU). Editable knobs come from ran.ofh (VF/PCI, RU/DU MAC, EAL
+// args, port maps) + ran.cell (band/arfcn/bw/scs/pci/antennas); the rest are proven O-RAN 7.2 defaults.
+// AMF_ADDR is resolved in-cluster. For a radically different O-RU, set ran.config with your own gnb.yaml.
+func ofhProfile(ofh *sdcorev1alpha1.RANOfh, cell sdcorev1alpha1.RANCell, tac int, sd int64) string {
+	pci, ruMac, duMac := "0000:af:0a.0", "aa:bb:cc:dd:ee:ff", "00:11:22:33:44:55"
+	if ofh != nil {
+		pci = orDefault(ofh.Interface, pci)
+		ruMac = orDefault(ofh.RuMac, ruMac)
+		duMac = orDefault(ofh.DuMac, duMac)
+	}
+	eal := fmt.Sprintf("--lcores (0-1)@(0-3) -a %s --iova-mode=pa", pci)
+	if ofh != nil && strings.TrimSpace(ofh.EalArgs) != "" {
+		eal = ofh.EalArgs
+	}
+	prachP, dlP, ulP := ofhPortList(ofh, "prach"), ofhPortList(ofh, "dl"), ofhPortList(ofh, "ul")
+	band := strings.TrimPrefix(orDefault(cell.Band, "n78"), "n")
+	arfcn := orInt(cell.DlArfcn, 630000)
+	bw := orInt(cell.BandwidthMHz, 100)
+	scs := orInt(cell.CommonScs, 30)
+	pciCell := orInt(cell.Pci, 0)
+	ant := orInt(cell.Antennas, 4)
+	return fmt.Sprintf(`cu_cp:
+  amf:
+    addr: AMF_ADDR
+    port: 38412
+    bind_addr: 0.0.0.0
+    supported_tracking_areas:
+      - tac: %d
+        plmn_list:
+          - plmn: "00101"
+            tai_slice_support_list:
+              - sst: 1
+                sd: %d
+hal:
+  eal_args: "%s"
+expert_phy:
+  allow_request_on_empty_uplink_slot: true
+ru_ofh:
+  t1a_max_cp_dl: 350
+  t1a_min_cp_dl: 200
+  t1a_max_cp_ul: 350
+  t1a_min_cp_ul: 200
+  t1a_max_up: 300
+  t1a_min_up: 0
+  ta4_max: 500
+  ta4_min: 0
+  is_prach_cp_enabled: true
+  ignore_ecpri_payload_size: false
+  ignore_ecpri_seq_id: true
+  compr_method_ul: bfp
+  compr_bitwidth_ul: 9
+  compr_method_dl: bfp
+  compr_bitwidth_dl: 9
+  compr_method_prach: bfp
+  compr_bitwidth_prach: 9
+  enable_ul_static_compr_hdr: true
+  enable_dl_static_compr_hdr: true
+  iq_scaling: 5.0
+  cells:
+    - network_interface: %s
+      ru_mac_addr: %s
+      du_mac_addr: %s
+      prach_port_id: %s
+      dl_port_id: %s
+      ul_port_id: %s
+cell_cfg:
+  dl_arfcn: %d
+  band: %s
+  channel_bandwidth_MHz: %d
+  common_scs: %d
+  plmn: "00101"
+  tac: %d
+  pci: %d
+  nof_antennas_dl: %d
+  nof_antennas_ul: %d
+  pdcch:
+    common:
+      coreset0_index: 11
+      ss0_index: 0
+  pdsch:
+    min_ue_mcs: 0
+    max_ue_mcs: 28
+    nof_harqs: 16
+    max_nof_harq_retxs: 4
+    mcs_table: qam64
+  pusch:
+    min_ue_mcs: 0
+    max_ue_mcs: 25
+    max_nof_harq_retxs: 4
+    msg3_delta_preamble: 2
+    p0_nominal_with_grant: -96
+    mcs_table: qam64
+  pucch:
+    p0_nominal: -96
+    sr_period_ms: 20
+  prach:
+    prach_config_index: 159
+    prach_root_sequence_index: 1
+    zero_correlation_zone: 14
+    prach_frequency_start: 22
+    preamble_rx_target_pw: -80
+    preamble_trans_max: 7
+    power_ramping_step_db: 4
+    nof_cb_preambles_per_ssb: 64
+    ra_resp_window: 10
+  csi:
+    csi_rs_enabled: true
+    csi_rs_period: 20
+  ssb:
+    ssb_period: 20
+    ssb_block_power_dbm: 0
+  tdd_ul_dl_cfg:
+    dl_ul_tx_period: 5
+    nof_dl_slots: 3
+    nof_dl_symbols: 6
+    nof_ul_slots: 1
+    nof_ul_symbols: 4
+log:
+  filename: stdout
+  all_level: info
+  ofh_level: info
+`, tac, sd, eal, pci, ruMac, duMac, prachP, dlP, ulP, arfcn, band, bw, scs, tac, pciCell, ant, ant)
+}
+
+// ofhPortList returns the eAxC port map for "prach"/"dl"/"ul" as a YAML flow list, honouring ran.ofh
+// overrides and falling back to a 4T4R default.
+func ofhPortList(ofh *sdcorev1alpha1.RANOfh, kind string) string {
+	def := map[string][]int{"prach": {4, 5, 6, 7}, "dl": {0, 1, 2, 3}, "ul": {0, 1, 2, 3}}[kind]
+	v := def
+	if ofh != nil {
+		switch kind {
+		case "prach":
+			if len(ofh.PrachPortId) > 0 {
+				v = ofh.PrachPortId
+			}
+		case "dl":
+			if len(ofh.DlPortId) > 0 {
+				v = ofh.DlPortId
+			}
+		case "ul":
+			if len(ofh.UlPortId) > 0 {
+				v = ofh.UlPortId
+			}
+		}
+	}
+	parts := make([]string, len(v))
+	for i, n := range v {
+		parts[i] = strconv.Itoa(n)
+	}
+	return "[" + strings.Join(parts, ", ") + "]"
 }
 
 // ranRadioBlock renders the split-specific radio section of gnb.yaml. Split 8 drives the SDR directly via
