@@ -7,4 +7,10 @@ cluster-config:
     enabled: true
   dns:
     enabled: true
+# Pin the kubelet node IP to the LAN address (mgmt-up substitutes __NODE_IP__ from MGMT_LAN_IP). Without
+# this, CK8s can pick a stray global IP (e.g. an OCUDU RAN loopback lo:ODU) as the node InternalIP.
+extra-node-kubelet-args:
+  --node-ip: __NODE_IP__
+  # local-built images have no registry to re-pull from; never let kubelet GC them
+  --image-gc-high-threshold: "100"
 containerd-base-dir: /var/lib/ck8s-containerd
