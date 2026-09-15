@@ -133,7 +133,7 @@ config:
           ifname: core
         measure_upf: true
         measure_flow: false
-        # Real gNBs (and UERANSIM >=3.2.7) put the PDU Session Container (0x85 PSC) extension header on
+        # Real gNBs put the PDU Session Container (0x85 PSC) extension header on
         # N3 GTP-U. Without gtppsc the UPF's pdrLookup misses EVERY uplink packet (pdrLookupFail climbs,
         # nothing egresses N6). Proven root-cause of "UE attaches + gets an IP but 0 data". Keep true.
         gtppsc: true

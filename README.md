@@ -20,10 +20,10 @@ A management cluster runs Nephio and a purpose-built operator. You declare an `
 | Phase | Stack configuration | Radio integration | Validation scope | Status |
 | --- | --- | --- | --- | --- |
 | 1 | SD-Core + OCUDU-RAN + Edge UPF | RF simulator | 50 simulated UEs | **Done** |
-| 2 | SD-Core + OCUDU-RAN + Edge UPF | 3GPP Split 8 | End-to-end integration and UE validation | **TBD** |
-| 3 | SD-Core + OCUDU-RAN + Edge UPF | O-RAN Split 7.2 | Open Fronthaul integration and UE validation | **TBD** |
+| 2 | SD-Core + OCUDU-RAN + Edge UPF | 3GPP Split 8 | End-to-end integration and UE validation | **Done** |
+| 3 | SD-Core + OCUDU-RAN + Edge UPF | O-RAN Split 7.2 | Open Fronthaul integration and UE validation | **Done** |
 
-> **Current validated baseline:** SD-Core, OCUDU-RAN and the Edge UPF have been integrated with the RF simulator and validated with 50 simulated UEs. Split 8 and Split 7.2 integrations remain on the roadmap.
+> **Current validated baseline:** all three phases are integrated end to end with SD-Core and the Edge UPF. Phase 1 with the RF simulator (50 simulated UEs); Phase 2 with a **3GPP Split-8** gNB driving a USRP; and Phase 3 with an **O-RAN Split-7.2** gNB reaching an O-RU over Open Fronthaul — Phases 2 and 3 each validated with a real UE.
 
 ---
 
@@ -93,7 +93,6 @@ Because every step is a reconciler, the loop is **self-healing**, and **teardo
 │   ├── controllers/       # auto-approver (Draft→Published) and helpers
 │   └── registry-mirror/   # mirror images into a private registry (air-gap / anti-rot)
 ├── intent/                # example intent objects (e.g. mgmtcore.yaml)
-├── e2e/                   # UERANSIM verification manifests
 ├── fabric/                # network fabric configuration
 ├── images/ocudu-gnb/      # OCUDU gNB container image build
 ├── fleet.yaml             # the Fleet intent (edit → make sites)
@@ -181,18 +180,40 @@ kind: Fleet
 metadata: { name: fleet, namespace: default }
 spec:
   sites:
-    - server: 192.168.1.111
-      user: ubuntu
+    - server: <edge-ip>
+      user: <login>
       role: cp+upf
       ran:
-        split: "8"          # "8" = SDR driven directly | "7.2" = Open Fronthaul to an O-RU
-        device: n310        # n310 | b210 | x310 | zmq
-        radioNic: enp175s0f1   # host NIC on the radio's data L2 (networked SDRs, e.g. N310)
-        radioAddr: 192.168.20.2 # the SDR's own address
+        split: "8"               # "8" = SDR driven directly | "7.2" = Open Fronthaul to an O-RU
+        device: n310             # n310 | b210 | x310 | zmq
+        radioNic: <sdr-data-nic> # host NIC on the radio's data L2 (networked SDRs, e.g. N310)
+        radioAddr: <sdr-ip>      # the SDR's own address
 ```
 
 ```
 make sites            # registers host(s) + reconciles the whole fleet declaratively
+```
+
+**Split-7.2 (Open Fronthaul to an O-RU).** The example above is Split-8 (an SDR driven directly). For an O-RU over eCPRI, set `split: "7.2"` and add an `ofh:` block. The operator does not own the fronthaul physics — the host needs the fronthaul VF bound to `vfio-pci`, 1G huge pages, **PTP** (`ptp4l`+`phc2sys`) locked to the RU clock, and the VF on the O-RU's fronthaul VLAN:
+
+```
+# host fronthaul prep (values below are placeholders — substitute your own):
+sudo dpdk-devbind.py --bind=vfio-pci <fronthaul-vf-pci>              # bind the fronthaul VF to vfio-pci
+sudo ip link set <fronthaul-nic> vf <vf-index> vlan <fronthaul-vlan> # put the VF on the O-RU's fronthaul VLAN
+sudo ptp4l -i <fronthaul-nic> -f <ptp.cfg> ; sudo phc2sys ...        # lock PTP to the RU clock
+```
+
+```
+      # the site's ran: block, for Split-7.2
+      ran:
+        split: "7.2"
+        device: <o-ru-model>
+        cell: { band: <band>, dlArfcn: <arfcn>, bandwidthMHz: <bw>, commonScs: <scs>, pci: <pci> }
+        ofh:
+          interface: "<fronthaul-vf-pci>"   # PCI address of the DPDK fronthaul VF (vfio-pci)
+          ruMac:  "<o-ru-mac>"              # the O-RU's MAC
+          duMac:  "<du-vf-mac>"             # the DU (fronthaul VF) MAC
+          vlanTag: <fronthaul-vlan>         # the O-RU's fronthaul VLAN (must match the host VF)
 ```
 
 #### Colocated core on the management server
@@ -260,15 +281,14 @@ kubectl get subscribers.sdcore.nephio.io -n default
 
 ### Verify a UE
 
+With the gNB attached to the core, follow the attach end to end from the gNB and core logs:
+
 ```
-# Self-contained core (local AMF):
-kubectl apply -f e2e/ueransim-edgea.yaml
-# UPF-only edge attaching to the mgmt CP over ClusterMesh:
-kubectl apply -f e2e/ueransim-edgeb.yaml
-kubectl logs -f deploy/ueransim-edgeb        # NG Setup → Registration → PDU session → ping
+kubectl logs -f deploy/<gnb>                     # NG Setup → UE Registration → PDU session establishment
+kubectl get subscribers.sdcore.nephio.io -n default
 ```
 
-Real UE / real radio: point the gNB at a phone and verify with a ping from the UE.
+Then, from the UE (a real phone on a `ran:` site), browse or run a ping / speed test — traffic egresses to the internet via N6.
 
 ---
 
@@ -280,6 +300,16 @@ Retracting intent is all it takes. Deleting an `EdgeSite`/`Fleet` garbage-coll
 kubectl delete edgesite <name>     # one site  (make edge-delete NAME=<name> also waits for CAPI)
 kubectl delete -f fleet.yaml       # whole fleet (make sites-delete also waits for CAPI)
 ```
+
+**Tear down everything, including the management plane.** `make down` runs `sites-delete` → `hosts-wipe` → `clean`, leaving every host pristine:
+
+```
+make down     # edge sites (CAPI-deprovisioned) + edge hosts wiped + the management plane removed
+```
+
+- `sites-delete` — delete the Fleet so Cluster API deprovisions the edge clusters.
+- `hosts-wipe` — wipe each edge host (byoh-agent, CK8s snap, bridges, containerd, leftover datapath rules).
+- `clean` — wipe the **management** host the same way and remove its Kubernetes snap.
 
 ---
 

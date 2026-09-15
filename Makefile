@@ -7,7 +7,6 @@
 #   make sites                             # PRODUCT: reconcile the WHOLE fleet from fleet.yaml (declarative)
 #   # fleet.yaml is ONE tiny intent — a list of {server, role}. The Fleet controller expands each into an
 #   # EdgeSite -> cluster/CP/UPF PackageVariants; Nephio does the rest. Add a line = a site; rm a line = gone.
-#   # then (opt-in) validate a UE with e2e/ueransim-*.yaml
 #
 include platform/mgmt-bootstrap/versions.env
 export
