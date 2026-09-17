@@ -1,0 +1,7 @@
+# VLAN pool the interface specializer allocates edge N4 VLANs from (blueprints reference index 'cluster').
+apiVersion: vlan.resource.nephio.org/v1alpha1
+kind: VLANIndex
+metadata:
+  name: cluster
+  namespace: default
+spec: {}

@@ -301,6 +301,13 @@ kubectl delete edgesite <name>     # one site  (make edge-delete NAME=<name> als
 kubectl delete -f fleet.yaml       # whole fleet (make sites-delete also waits for CAPI)
 ```
 
+**Delete only the edge sites — the management plane stays up.** `make sites-delete` deletes the Fleet so Cluster API deprovisions every edge cluster; `make edge-delete NAME=<name>` removes a single site. The mgmt plane keeps running:
+
+```
+make sites-delete            # all edge sites removed, management plane untouched
+make edge-delete NAME=<name> # remove just one edge site
+```
+
 **Tear down everything, including the management plane.** `make down` runs `sites-delete` → `hosts-wipe` → `clean`, leaving every host pristine:
 
 ```
@@ -329,7 +336,7 @@ make down     # edge sites (CAPI-deprovisioned) + edge hosts wiped + the managem
 | `make up`                                | Whole-fabric bring-up (`mgmt → publish → mgmt-core → sites`).                               |
 | `make down`                              | Whole-fabric teardown (`sites-delete → clean`).                                             |
 | `make edge-delete NAME=<n>`              | Delete one EdgeSite + wait for CAPI to deprovision.                                         |
-| `make sites-delete`                      | Delete the fleet + wait for all edge clusters to deprovision.                               |
+| `make sites-delete`                      | Delete **only** the edge sites (management plane stays up) + wait for CAPI to deprovision.  |
 | `make reset`                             | Delete all EdgeSites/workloads, keep the mgmt platform.                                     |
 | `make clean`                             | Remove the mgmt Kubernetes snap.                                                            |
 

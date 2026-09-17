@@ -1,0 +1,11 @@
+# The shared 'vpc-internal' fabric the SMF N4 (sdcore-cp) and every edge UPF specialize onto, so SMF<->UPF
+# PFCP reaches across clusters. Applied once at bootstrap alongside sdcore-vpc.
+apiVersion: ipam.resource.nephio.org/v1alpha1
+kind: NetworkInstance
+metadata:
+  name: vpc-internal
+  namespace: default
+spec:
+  prefixes:
+    - prefix: "10.0.0.0/8"
+    - prefix: "172.16.0.0/12"

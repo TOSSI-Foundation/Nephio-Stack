@@ -277,6 +277,10 @@ hosts-wipe:
 
 sites-delete:
 	kubectl delete -f $(FLEET) --ignore-not-found
+	@echo '>> GC per-site packages + stuck CAPI finalizers (declarative teardown)…'
+	-@for pr in $$(kubectl get packagerevisions -o name 2>/dev/null | grep -E 'cluster-site-|cp-site-|upf-site-|multus-cluster-site-|datapath-cluster-site-'); do kubectl patch $$pr --type=merge -p '{"spec":{"lifecycle":"DeletionProposed"}}' 2>/dev/null; kubectl delete $$pr --wait=false --ignore-not-found 2>/dev/null; done
+	-@for c in $$(kubectl get clusters -o name 2>/dev/null | grep '/cluster-site-'); do kubectl patch $$c --type=merge -p '{"metadata":{"finalizers":null}}' 2>/dev/null; done
+	-@for m in $$(kubectl get machines -o name 2>/dev/null | grep '/cluster-site-'); do kubectl patch $$m --type=merge -p '{"metadata":{"finalizers":null}}' 2>/dev/null; done
 	@echo ">> waiting for CAPI to deprovision all edge clusters (parallel)…"
 	@for t in $$(seq 1 72); do n=$$(kubectl get clusters -A -o name 2>/dev/null | grep -c '/cluster-' || true); \
 	   [ "$$n" = 0 ] && { echo ">> all edge clusters deprovisioned"; break; }; echo "   $$n cluster(s) still unwinding…"; sleep 5; done
@@ -289,6 +293,10 @@ sites-delete:
 edge-delete:
 	@test -n "$(NAME)" || { echo 'usage: make edge-delete NAME=<edge-name>'; exit 1; }
 	kubectl delete edgesite $(NAME) --ignore-not-found
+	@echo '>> GC per-site packages + stuck CAPI finalizers (declarative teardown)…'
+	-@for pr in $$(kubectl get packagerevisions -o name 2>/dev/null | grep -E 'cluster-$(NAME)|cp-$(NAME)|upf-$(NAME)|multus-cluster-$(NAME)|datapath-cluster-$(NAME)'); do kubectl patch $$pr --type=merge -p '{"spec":{"lifecycle":"DeletionProposed"}}' 2>/dev/null; kubectl delete $$pr --wait=false --ignore-not-found 2>/dev/null; done
+	-@for c in $$(kubectl get clusters -o name 2>/dev/null | grep '/cluster-$(NAME)'); do kubectl patch $$c --type=merge -p '{"metadata":{"finalizers":null}}' 2>/dev/null; done
+	-@for m in $$(kubectl get machines -o name 2>/dev/null | grep '/cluster-$(NAME)'); do kubectl patch $$m --type=merge -p '{"metadata":{"finalizers":null}}' 2>/dev/null; done
 	@echo ">> waiting for CAPI to deprovision cluster-$(NAME)…"
 	@for t in $$(seq 1 72); do kubectl get cluster cluster-$(NAME) >/dev/null 2>&1 || { echo ">> cluster-$(NAME) deprovisioned"; break; }; sleep 5; done
 

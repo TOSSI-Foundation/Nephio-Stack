@@ -139,7 +139,7 @@ ok "Config Sync operator + reconciler-manager up"
 
 phase "Edge platform [3/6] — CRDs the edge packages need"
 for crd in nfdeployments.workload.nephio.org interfaces.req.nephio.org datanetworks.req.nephio.org \
-           networkattachmentdefinitions.k8s.cni.cncf.io packagevariants.config.porch.kpt.dev; do
+           network-attachment-definitions.k8s.cni.cncf.io packagevariants.config.porch.kpt.dev; do
   kubectl get crd "$crd" -o yaml 2>/dev/null | EK apply -f - >/dev/null 2>&1 || true
 done
 EK apply -f "$HERE/../../operator/config/crd/bases/" >/dev/null 2>&1 || true
