@@ -1,10 +1,9 @@
-# Cloud-Native 5G Deployment Stacks
+# Nephio-Orchestrated Cloud-Native Private 5G with SD-Core, Edge UPF and OCUDU-RAN Across Split 7.2x and Split 8
 
 This repository brings together deployment stacks for building and validating cloud-native private 5G networks. Each stack is documented as a self-contained implementation so additional orchestration, core, RAN and edge combinations can be added without mixing their architecture, deployment workflow or validation status.
 
 ---
 
-## Nephio Stack
 
 ### SD-Core + OCUDU-RAN + Edge UPF
 
